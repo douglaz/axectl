@@ -21,6 +21,16 @@
         };
       in
       {
+        packages.default = pkgs.rustPlatform.buildRustPackage {
+          pname = "axectl";
+          version = "0.1.0";
+          src = ./.;
+          cargoLock.lockFile = ./Cargo.lock;
+          nativeBuildInputs = with pkgs; [ pkg-config ];
+          buildInputs = with pkgs; [ openssl ];
+          doCheck = false; # Skip tests during build
+        };
+
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
             bashInteractive

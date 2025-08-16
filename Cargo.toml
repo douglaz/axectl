@@ -20,7 +20,7 @@ tabled = "0.15"
 colored = "2"
 
 # Network
-reqwest = { version = "0.11", features = ["json"] }
+reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
 mdns-sd = "0.11"
 ipnetwork = "0.20"
 local-ip-address = "0.6"
@@ -32,7 +32,7 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }
 
 # Optional Storage
-sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite"], optional = true }
+sqlx = { version = "0.8.1", features = ["runtime-tokio-rustls", "sqlite"], optional = true }
 
 # Logging
 tracing = "0.1"

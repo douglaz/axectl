@@ -11,42 +11,22 @@ targets = [
 ]
 
 [advisories]
-db-path = "~/.cargo/advisory-db"
-db-urls = ["https://github.com/rustsec/advisory-db"]
-vulnerability = "deny"
-unmaintained = "warn"
-yanked = "warn"
-notice = "warn"
 ignore = [
-    # Add advisory IDs to ignore here if needed
+    # proc-macro-error unmaintained warning - from tabled dependency
+    "RUSTSEC-2024-0370",
 ]
 
 [licenses]
-unlicensed = "deny"
 allow = [
     "MIT",
     "Apache-2.0",
     "Apache-2.0 WITH LLVM-exception",
-    "BSD-2-Clause",
     "BSD-3-Clause",
     "ISC",
-    "Unicode-DFS-2016",
-    "CC0-1.0",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Zlib",
 ]
-deny = [
-    "GPL-2.0",
-    "GPL-3.0",
-    "AGPL-1.0",
-    "AGPL-3.0",
-]
-copyleft = "warn"
-allow-osi-fsf-free = "neither"
-default = "deny"
-confidence-threshold = 0.8
-
-[[licenses.exceptions]]
-allow = ["Unicode-DFS-2016"]
-name = "unicode-ident"
 
 [bans]
 multiple-versions = "warn"
@@ -54,19 +34,11 @@ wildcards = "allow"
 highlight = "all"
 workspace-default-features = "allow"
 external-default-features = "allow"
-allow = [
-    # Add specific crate names here if you need multiple versions
-]
+allow = []
 deny = [
     # Deny known problematic crates
     { name = "openssl", version = "*" },  # Prefer rustls
     { name = "cmake", version = "*" },    # Avoid C dependencies
-]
-skip = [
-    # Skip version checks for these crates if needed
-]
-skip-tree = [
-    # Skip entire dependency trees if needed
 ]
 
 [sources]

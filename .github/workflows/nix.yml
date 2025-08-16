@@ -16,18 +16,11 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Install Nix
-      uses: cachix/install-nix-action@v23
+      uses: cachix/install-nix-action@v31
       with:
         extra_nix_config: |
           experimental-features = nix-command flakes
           access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
-
-    - name: Setup Cachix
-      uses: cachix/cachix-action@v12
-      with:
-        name: axectl
-        # If you have a signing key, add it as CACHIX_SIGNING_KEY secret
-        # signingKey: '${{ secrets.CACHIX_SIGNING_KEY }}'
 
     - name: Check flake
       run: nix flake check
@@ -56,14 +49,14 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest]  # macOS removed due to Nix installation conflicts
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
     - name: Install Nix
-      uses: cachix/install-nix-action@v23
+      uses: cachix/install-nix-action@v31
       with:
         extra_nix_config: |
           experimental-features = nix-command flakes
