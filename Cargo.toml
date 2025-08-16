@@ -1,0 +1,46 @@
+[package]
+name = "axectl"
+version = "0.1.0"
+edition = "2021"
+description = "CLI tool for managing Bitaxe and NerdQAxe miners"
+license = "MIT"
+repository = "https://github.com/master/axectl"
+
+[dependencies]
+# Core
+tokio = { version = "1", features = ["full"] }
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+futures = "0.3"
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+tabled = "0.15"
+colored = "2"
+
+# Network
+reqwest = { version = "0.11", features = ["json"] }
+mdns-sd = "0.11"
+ipnetwork = "0.20"
+local-ip-address = "0.6"
+url = "2"
+flume = "0.11"
+
+# Time and utilities
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4"] }
+
+# Optional Storage
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite"], optional = true }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+[dev-dependencies]
+tempfile = "3"
+
+[features]
+default = []
+persistent-storage = ["sqlx"]
