@@ -18,8 +18,8 @@ case "${1:-}" in
     ;;
   --test)
     echo "🧪 Building and testing static binary"
-    cargo build --release
-    cargo test --release
+    cargo build --release --target x86_64-unknown-linux-musl
+    cargo test --release --target x86_64-unknown-linux-musl
     echo "✅ Build and tests complete: ./target/x86_64-unknown-linux-musl/release/axectl"
     # Verify it's static
     echo "📋 Binary info:"
@@ -28,7 +28,7 @@ case "${1:-}" in
     ;;
   *)
     echo "📦 Building static release binary"
-    cargo build --release
+    cargo build --release --target x86_64-unknown-linux-musl
     echo "✅ Static build complete: ./target/x86_64-unknown-linux-musl/release/axectl"
     echo "📋 Binary info:"
     file ./target/x86_64-unknown-linux-musl/release/axectl
