@@ -45,7 +45,11 @@ impl BitaxeInfoResponse {
     pub fn to_unified_info(&self) -> super::SystemInfoResponse {
         super::SystemInfoResponse {
             asic_model: self.asic_model.clone(),
-            board_version: self.board_version.as_deref().unwrap_or("unknown").to_string(),
+            board_version: self
+                .board_version
+                .as_deref()
+                .unwrap_or("unknown")
+                .to_string(),
             firmware_version: self.firmware_version.clone(),
             mac_address: self.mac_address.clone(),
             hostname: self.hostname.clone(),

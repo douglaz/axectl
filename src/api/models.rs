@@ -1,6 +1,6 @@
+use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use anyhow::{anyhow, Result};
 use serde_json::Value;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,7 +32,7 @@ impl DeviceType {
     pub fn as_str(&self) -> &'static str {
         match self {
             DeviceType::BitaxeUltra => "Bitaxe Ultra",
-            DeviceType::BitaxeMax => "Bitaxe Max", 
+            DeviceType::BitaxeMax => "Bitaxe Max",
             DeviceType::BitaxeGamma => "Bitaxe Gamma",
             DeviceType::NerdqaxePlus => "NerdQaxe++",
             DeviceType::Unknown => "Unknown",
@@ -215,9 +215,12 @@ impl DeviceStats {
 
 impl SwarmSummary {
     pub fn from_devices_and_stats(devices: &[DeviceInfo], stats: &[DeviceStats]) -> Self {
-        let devices_online = devices.iter().filter(|d| matches!(d.status, DeviceStatus::Online)).count();
+        let devices_online = devices
+            .iter()
+            .filter(|d| matches!(d.status, DeviceStatus::Online))
+            .count();
         let devices_offline = devices.len() - devices_online;
-        
+
         let total_hashrate_mhs = stats.iter().map(|s| s.hashrate_mhs).sum();
         let total_power_watts = stats.iter().map(|s| s.power_watts).sum();
         let average_temperature = if !stats.is_empty() {
@@ -274,23 +277,21 @@ impl DeviceResponse {
                 let response: super::nerdqaxe::NerdQaxeInfoResponse = serde_json::from_str(json)?;
                 Ok(DeviceResponse::NerdQaxe(response))
             }
-            DetectedDeviceType::Unknown => {
-                Err(anyhow!("Unknown device type - could not identify from JSON response"))
-            }
+            DetectedDeviceType::Unknown => Err(anyhow!(
+                "Unknown device type - could not identify from JSON response"
+            )),
         }
     }
 
     /// Get the correct DeviceType for this device
     pub fn get_device_type(&self) -> DeviceType {
         match self {
-            DeviceResponse::Bitaxe(bitaxe) => {
-                match bitaxe.asic_model.to_lowercase().as_str() {
-                    s if s.contains("bm1366") => DeviceType::BitaxeUltra,
-                    s if s.contains("bm1368") => DeviceType::BitaxeMax,
-                    s if s.contains("bm1370") => DeviceType::BitaxeGamma,
-                    _ => DeviceType::Unknown,
-                }
-            }
+            DeviceResponse::Bitaxe(bitaxe) => match bitaxe.asic_model.to_lowercase().as_str() {
+                s if s.contains("bm1366") => DeviceType::BitaxeUltra,
+                s if s.contains("bm1368") => DeviceType::BitaxeMax,
+                s if s.contains("bm1370") => DeviceType::BitaxeGamma,
+                _ => DeviceType::Unknown,
+            },
             DeviceResponse::NerdQaxe(_) => DeviceType::NerdqaxePlus,
         }
     }

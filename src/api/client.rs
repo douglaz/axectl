@@ -44,7 +44,7 @@ impl AxeOsClient {
     // Test if the device is reachable and running AxeOS
     pub async fn health_check(&self) -> Result<bool> {
         let url = format!("{}/api/system/info", self.base_url);
-        
+
         match self.client.get(&url).send().await {
             Ok(response) => Ok(response.status().is_success()),
             Err(_) => Ok(false),
@@ -54,8 +54,9 @@ impl AxeOsClient {
     // Get system information with device type detection
     pub async fn get_system_info(&self) -> Result<SystemInfoResponse> {
         let url = format!("{}/api/system/info", self.base_url);
-        
-        let response = self.client
+
+        let response = self
+            .client
             .get(&url)
             .send()
             .await
@@ -71,8 +72,8 @@ impl AxeOsClient {
             .context("Failed to get response text")?;
 
         // Parse using device detection
-        let device_response = DeviceResponse::from_json(&json_text)
-            .context("Failed to parse device response")?;
+        let device_response =
+            DeviceResponse::from_json(&json_text).context("Failed to parse device response")?;
 
         Ok(device_response.to_unified_info())
     }
@@ -80,8 +81,9 @@ impl AxeOsClient {
     /// Get complete device info with proper device type detection
     pub async fn get_complete_device_info(&self) -> Result<(SystemInfoResponse, DeviceType)> {
         let url = format!("{}/api/system/info", self.base_url);
-        
-        let response = self.client
+
+        let response = self
+            .client
             .get(&url)
             .send()
             .await
@@ -97,8 +99,8 @@ impl AxeOsClient {
             .context("Failed to get response text")?;
 
         // Parse using device detection
-        let device_response = DeviceResponse::from_json(&json_text)
-            .context("Failed to parse device response")?;
+        let device_response =
+            DeviceResponse::from_json(&json_text).context("Failed to parse device response")?;
 
         let device_type = device_response.get_device_type();
         let system_info = device_response.to_unified_info();
@@ -109,8 +111,9 @@ impl AxeOsClient {
     // Get system statistics with device type detection
     pub async fn get_system_stats(&self) -> Result<SystemStatsResponse> {
         let url = format!("{}/api/system/info", self.base_url);
-        
-        let response = self.client
+
+        let response = self
+            .client
             .get(&url)
             .send()
             .await
@@ -126,8 +129,8 @@ impl AxeOsClient {
             .context("Failed to get response text")?;
 
         // Parse using device detection
-        let device_response = DeviceResponse::from_json(&json_text)
-            .context("Failed to parse device response")?;
+        let device_response =
+            DeviceResponse::from_json(&json_text).context("Failed to parse device response")?;
 
         Ok(device_response.to_unified_stats())
     }
@@ -135,8 +138,9 @@ impl AxeOsClient {
     // Get dashboard statistics (usually more detailed)
     pub async fn get_dashboard_stats(&self) -> Result<SystemStatsResponse> {
         let url = format!("{}/api/system/statistics/dashboard", self.base_url);
-        
-        let response = self.client
+
+        let response = self
+            .client
             .get(&url)
             .send()
             .await
@@ -157,8 +161,9 @@ impl AxeOsClient {
     // Get ASIC information
     pub async fn get_asic_info(&self) -> Result<AsicResponse> {
         let url = format!("{}/api/system/asic", self.base_url);
-        
-        let response = self.client
+
+        let response = self
+            .client
             .get(&url)
             .send()
             .await
@@ -179,8 +184,9 @@ impl AxeOsClient {
     // Update system settings
     pub async fn update_system(&self, request: SystemUpdateRequest) -> Result<CommandResult> {
         let url = format!("{}/api/system", self.base_url);
-        
-        let response = self.client
+
+        let response = self
+            .client
             .patch(&url)
             .json(&request)
             .send()
@@ -195,7 +201,10 @@ impl AxeOsClient {
                 timestamp: chrono::Utc::now(),
             }
         } else {
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
             CommandResult {
                 success: false,
                 message: format!("Failed to update system settings: {}", error_text),
@@ -210,8 +219,9 @@ impl AxeOsClient {
     // Restart the system
     pub async fn restart_system(&self) -> Result<CommandResult> {
         let url = format!("{}/api/system/restart", self.base_url);
-        
-        let response = self.client
+
+        let response = self
+            .client
             .post(&url)
             .send()
             .await
@@ -225,7 +235,10 @@ impl AxeOsClient {
                 timestamp: chrono::Utc::now(),
             }
         } else {
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
             CommandResult {
                 success: false,
                 message: format!("Failed to restart system: {}", error_text),
@@ -240,8 +253,9 @@ impl AxeOsClient {
     // Scan for WiFi networks
     pub async fn scan_wifi(&self) -> Result<WifiScanResponse> {
         let url = format!("{}/api/system/wifi/scan", self.base_url);
-        
-        let response = self.client
+
+        let response = self
+            .client
             .get(&url)
             .send()
             .await
@@ -262,12 +276,13 @@ impl AxeOsClient {
     // Update firmware via OTA
     pub async fn update_firmware(&self, firmware_url: &str) -> Result<CommandResult> {
         let url = format!("{}/api/system/OTA", self.base_url);
-        
+
         let body = serde_json::json!({
             "url": firmware_url
         });
 
-        let response = self.client
+        let response = self
+            .client
             .post(&url)
             .json(&body)
             .send()
@@ -282,7 +297,10 @@ impl AxeOsClient {
                 timestamp: chrono::Utc::now(),
             }
         } else {
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
             CommandResult {
                 success: false,
                 message: format!("Failed to update firmware: {}", error_text),
@@ -297,12 +315,13 @@ impl AxeOsClient {
     // Update AxeOS web interface
     pub async fn update_axeos(&self, axeos_url: &str) -> Result<CommandResult> {
         let url = format!("{}/api/system/OTAWWW", self.base_url);
-        
+
         let body = serde_json::json!({
             "url": axeos_url
         });
 
-        let response = self.client
+        let response = self
+            .client
             .post(&url)
             .json(&body)
             .send()
@@ -317,7 +336,10 @@ impl AxeOsClient {
                 timestamp: chrono::Utc::now(),
             }
         } else {
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
             CommandResult {
                 success: false,
                 message: format!("Failed to update AxeOS: {}", error_text),
@@ -350,10 +372,8 @@ impl AxeOsClient {
 
     // Helper method to get complete device info and stats
     pub async fn get_complete_info(&self) -> Result<(SystemInfoResponse, SystemStatsResponse)> {
-        let (info_result, stats_result) = tokio::try_join!(
-            self.get_system_info(),
-            self.get_system_stats()
-        )?;
+        let (info_result, stats_result) =
+            tokio::try_join!(self.get_system_info(), self.get_system_stats())?;
 
         Ok((info_result, stats_result))
     }
@@ -369,7 +389,6 @@ impl AxeOsClient {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -378,10 +397,10 @@ mod tests {
     fn test_client_creation() -> Result<()> {
         let client = AxeOsClient::new("192.168.1.100")?;
         assert_eq!(client.base_url(), "http://192.168.1.100");
-        
+
         let client = AxeOsClient::new("http://192.168.1.100")?;
         assert_eq!(client.base_url(), "http://192.168.1.100");
-        
+
         Ok(())
     }
 

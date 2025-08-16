@@ -1,6 +1,6 @@
 use anyhow::Result;
-use clap::Parser;
 use axectl::Cli;
+use clap::Parser;
 
 #[tokio::main]
 async fn main() -> Result<()> {

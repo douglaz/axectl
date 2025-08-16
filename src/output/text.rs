@@ -55,11 +55,11 @@ pub fn format_hashrate(hashrate_mhs: f64) -> String {
 
 pub fn format_temperature(temp_celsius: f64, color: bool) -> String {
     let temp_str = format!("{:.1}°C", temp_celsius);
-    
+
     if !color {
         return temp_str;
     }
-    
+
     if temp_celsius >= 80.0 {
         temp_str.red().to_string()
     } else if temp_celsius >= 70.0 {
@@ -77,7 +77,7 @@ pub fn format_uptime(uptime_seconds: u64) -> String {
     let days = uptime_seconds / 86400;
     let hours = (uptime_seconds % 86400) / 3600;
     let minutes = (uptime_seconds % 3600) / 60;
-    
+
     if days > 0 {
         format!("{}d {}h", days, hours)
     } else if hours > 0 {
@@ -88,13 +88,17 @@ pub fn format_uptime(uptime_seconds: u64) -> String {
 }
 
 pub fn format_percentage(value: f64, total: f64, color: bool) -> String {
-    let percentage = if total > 0.0 { (value / total) * 100.0 } else { 0.0 };
+    let percentage = if total > 0.0 {
+        (value / total) * 100.0
+    } else {
+        0.0
+    };
     let percent_str = format!("{:.1}%", percentage);
-    
+
     if !color {
         return percent_str;
     }
-    
+
     if percentage >= 95.0 {
         percent_str.green().to_string()
     } else if percentage >= 80.0 {

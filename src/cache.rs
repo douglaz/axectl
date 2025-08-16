@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use chrono::{DateTime, Utc, Duration};
+use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -37,7 +37,7 @@ impl DeviceCache {
     /// Load cache from directory (returns empty cache if file doesn't exist)
     pub fn load(cache_dir: &Path) -> Result<Self> {
         let cache_file = cache_dir.join("devices.json");
-        
+
         if !cache_file.exists() {
             return Ok(Self::new());
         }
@@ -60,13 +60,13 @@ impl DeviceCache {
     /// Save cache to directory
     pub fn save(&self, cache_dir: &Path) -> Result<()> {
         // Create cache directory if it doesn't exist
-        fs::create_dir_all(cache_dir)
-            .with_context(|| format!("Failed to create cache directory: {}", cache_dir.display()))?;
+        fs::create_dir_all(cache_dir).with_context(|| {
+            format!("Failed to create cache directory: {}", cache_dir.display())
+        })?;
 
         let cache_file = cache_dir.join("devices.json");
-        
-        let content = serde_json::to_string_pretty(self)
-            .context("Failed to serialize cache")?;
+
+        let content = serde_json::to_string_pretty(self).context("Failed to serialize cache")?;
 
         fs::write(&cache_file, content)
             .with_context(|| format!("Failed to write cache file: {}", cache_file.display()))?;
@@ -88,7 +88,8 @@ impl DeviceCache {
             last_seen: Utc::now(),
         };
 
-        self.devices.insert(device.ip_address.clone(), cached_device);
+        self.devices
+            .insert(device.ip_address.clone(), cached_device);
         self.last_updated = Utc::now();
     }
 
@@ -96,7 +97,7 @@ impl DeviceCache {
     pub fn prune_old(&mut self, max_age: Duration) {
         let cutoff = Utc::now() - max_age;
         self.devices.retain(|_, device| device.last_seen > cutoff);
-        
+
         if !self.devices.is_empty() {
             self.last_updated = Utc::now();
         }
@@ -164,7 +165,9 @@ mod tests {
         // Load cache
         let loaded_cache = DeviceCache::load(cache_dir)?;
         assert_eq!(loaded_cache.device_count(), 1);
-        assert!(loaded_cache.get_known_ips().contains(&"192.168.1.100".to_string()));
+        assert!(loaded_cache
+            .get_known_ips()
+            .contains(&"192.168.1.100".to_string()));
 
         let cached_device = &loaded_cache.devices["192.168.1.100"];
         assert_eq!(cached_device.name, "test-device");
@@ -188,7 +191,7 @@ mod tests {
     #[test]
     fn test_cache_prune() -> Result<()> {
         let mut cache = DeviceCache::new();
-        
+
         // Add device with old timestamp
         let old_device = CachedDevice {
             name: "old-device".to_string(),
@@ -196,7 +199,7 @@ mod tests {
             mac_address: "11:22:33:44:55:66".to_string(),
             last_seen: Utc::now() - Duration::days(8), // 8 days old
         };
-        
+
         // Add device with recent timestamp
         let recent_device = CachedDevice {
             name: "recent-device".to_string(),
@@ -205,8 +208,12 @@ mod tests {
             last_seen: Utc::now() - Duration::hours(1), // 1 hour old
         };
 
-        cache.devices.insert("192.168.1.100".to_string(), old_device);
-        cache.devices.insert("192.168.1.101".to_string(), recent_device);
+        cache
+            .devices
+            .insert("192.168.1.100".to_string(), old_device);
+        cache
+            .devices
+            .insert("192.168.1.101".to_string(), recent_device);
         assert_eq!(cache.device_count(), 2);
 
         // Prune devices older than 7 days
