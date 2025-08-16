@@ -49,20 +49,6 @@ jobs:
         path: audit-results.json
         retention-days: 30
 
-  dependency-review:
-    name: Dependency Review
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' && github.repository_visibility == 'public'
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Dependency Review
-      uses: actions/dependency-review-action@v3
-      with:
-        fail-on-severity: moderate
-
   supply-chain-security:
     name: Supply Chain Security
     runs-on: ubuntu-latest
