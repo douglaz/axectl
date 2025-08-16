@@ -29,6 +29,7 @@
           nativeBuildInputs = with pkgs; [ pkg-config ];
           buildInputs = with pkgs; [ openssl ];
           doCheck = false; # Skip tests during build
+          # Build for current platform by default
         };
 
         devShells.default = pkgs.mkShell {

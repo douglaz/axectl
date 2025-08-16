@@ -22,28 +22,51 @@ axectl monitor --temp-alert 75 --hashrate-alert 10
 
 ## 📦 Installation
 
-### Using Nix (Recommended)
+### Static Binary Downloads (Recommended)
+Download pre-built static binaries from the [releases page](https://github.com/master/axectl/releases).
+
+**Linux users**: Download the musl static binary - it works on any Linux distribution without dependencies:
+```bash
+# Download latest release (replace VERSION with actual version)
+curl -L -o axectl https://github.com/master/axectl/releases/download/vVERSION/axectl-x86_64-linux-musl.tar.gz
+tar -xzf axectl-x86_64-linux-musl.tar.gz
+chmod +x axectl
+./axectl --help
+```
+
+**Benefits of static binaries:**
+- ✅ **Universal compatibility** - works on any Linux distribution
+- ✅ **No dependencies** - single file that just works
+- ✅ **Container-friendly** - perfect for Docker/containers
+- ✅ **Security** - reduced attack surface with static linking
+
+### Building from Source
+
+#### Quick Build (Static Binary)
+```bash
+git clone https://github.com/master/axectl.git
+cd axectl
+cargo build --release
+# Produces static binary: ./target/x86_64-unknown-linux-musl/release/axectl
+```
+
+#### Using Nix
 ```bash
 # Run directly from GitHub
 nix run 'git+https://github.com/master/axectl.git'
 
-# Or clone and build locally
+# Or build locally
 git clone https://github.com/master/axectl.git
 cd axectl
 nix develop
 cargo build --release
 ```
 
-### Using Cargo
+#### Development Builds
+For faster development iterations (non-static):
 ```bash
-git clone https://github.com/master/axectl.git
-cd axectl
-cargo build --release
-./target/release/axectl --help
+cargo build --target x86_64-unknown-linux-gnu  # Dynamic linking for faster builds
 ```
-
-### Binary Releases
-Download pre-built binaries from the [releases page](https://github.com/master/axectl/releases).
 
 ## 🎯 Why axectl?
 

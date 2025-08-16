@@ -87,16 +87,18 @@ jobs:
     strategy:
       matrix:
         include:
-          # Linux
+          # Linux Static Binaries (Primary)
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
             name: axectl-x86_64-linux-musl.tar.gz
+            primary: true
             
           - target: aarch64-unknown-linux-musl
             os: ubuntu-latest
             name: axectl-aarch64-linux-musl.tar.gz
+            primary: true
             
-          # macOS
+          # macOS (Secondary)
           - target: x86_64-apple-darwin
             os: macos-latest
             name: axectl-x86_64-macos.tar.gz
@@ -105,7 +107,7 @@ jobs:
             os: macos-latest
             name: axectl-aarch64-macos.tar.gz
             
-          # Windows
+          # Windows (Secondary)
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             name: axectl-x86_64-windows.zip

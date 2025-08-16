@@ -31,8 +31,6 @@ flume = "0.11"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }
 
-# Optional Storage
-sqlx = { version = "0.8.1", features = ["runtime-tokio-rustls", "sqlite"], optional = true }
 
 # Logging
 tracing = "0.1"
@@ -43,4 +41,3 @@ tempfile = "3"
 
 [features]
 default = []
-persistent-storage = ["sqlx"]
