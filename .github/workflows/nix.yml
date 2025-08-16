@@ -22,13 +22,6 @@ jobs:
           experimental-features = nix-command flakes
           access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
 
-    - name: Setup Cachix
-      uses: cachix/cachix-action@v12
-      with:
-        name: axectl
-        # If you have a signing key, add it as CACHIX_SIGNING_KEY secret
-        # signingKey: '${{ secrets.CACHIX_SIGNING_KEY }}'
-
     - name: Check flake
       run: nix flake check
 

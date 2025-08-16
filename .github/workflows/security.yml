@@ -52,7 +52,7 @@ jobs:
   dependency-review:
     name: Dependency Review
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && github.repository_visibility == 'public'
     
     steps:
     - name: Checkout code
