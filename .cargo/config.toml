@@ -1,0 +1,12 @@
+[build]
+# Use musl static binary as default target for Linux builds
+target = "x86_64-unknown-linux-musl"
+
+[target.x86_64-unknown-linux-musl]
+# Configure musl static linking
+linker = "x86_64-linux-musl-gcc"
+
+[env]
+# Ensure static linking for musl builds
+CC_x86_64_unknown_linux_musl = { value = "x86_64-linux-musl-gcc", condition = { env_not_set = "CC_x86_64_unknown_linux_musl" } }
+CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER = { value = "x86_64-linux-musl-gcc", condition = { env_not_set = "CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER" } }

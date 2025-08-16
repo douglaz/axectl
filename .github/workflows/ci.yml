@@ -11,8 +11,62 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
+  musl-build:
+    name: Build & Test Static Binary (musl) - Primary
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: x86_64-unknown-linux-musl
+        components: rustfmt, clippy
+
+    - name: Install musl tools
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y musl-tools pkg-config
+
+    - name: Cache cargo dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: musl-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: musl-cargo-
+
+    - name: Check formatting
+      run: cargo fmt --all -- --check
+
+    - name: Run clippy
+      run: cargo clippy --target x86_64-unknown-linux-musl --all-targets --all-features -- -D warnings
+
+    - name: Build static binary
+      run: cargo build --release --target x86_64-unknown-linux-musl
+
+    - name: Test static binary
+      run: |
+        file target/x86_64-unknown-linux-musl/release/axectl
+        ldd target/x86_64-unknown-linux-musl/release/axectl || echo "Static binary confirmed (no dynamic dependencies)"
+        target/x86_64-unknown-linux-musl/release/axectl --version
+
+    - name: Run tests
+      run: cargo test --target x86_64-unknown-linux-musl --verbose
+
+    - name: Upload static binary artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: axectl-x86_64-linux-musl
+        path: target/x86_64-unknown-linux-musl/release/axectl
+        retention-days: 7
+
   test:
-    name: Test Suite
+    name: Cross-Platform Test Suite
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -57,53 +111,6 @@ jobs:
 
     - name: Run tests with all features
       run: cargo test --all-features --verbose
-
-  musl-build:
-    name: Build Static Binary (musl)
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        targets: x86_64-unknown-linux-musl
-
-    - name: Install musl tools
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y musl-tools pkg-config
-
-    - name: Cache cargo dependencies
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
-        key: musl-cargo-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: musl-cargo-
-
-    - name: Build static binary
-      run: |
-        export CC_x86_64_unknown_linux_musl=musl-gcc
-        export CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc
-        cargo build --release --target x86_64-unknown-linux-musl
-
-    - name: Test static binary
-      run: |
-        file target/x86_64-unknown-linux-musl/release/axectl
-        ldd target/x86_64-unknown-linux-musl/release/axectl || echo "Static binary confirmed (no dynamic dependencies)"
-        target/x86_64-unknown-linux-musl/release/axectl --version
-
-    - name: Upload static binary artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: axectl-x86_64-linux-musl
-        path: target/x86_64-unknown-linux-musl/release/axectl
-        retention-days: 7
 
   security-audit:
     name: Security Audit
