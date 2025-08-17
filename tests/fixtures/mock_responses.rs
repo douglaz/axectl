@@ -1,6 +1,7 @@
-/// Mock HTTP responses for testing
-/// These are based on real AxeOS API responses but sanitized for testing
+//! Mock HTTP responses for testing
+//! These are based on real AxeOS API responses but sanitized for testing
 
+#[allow(dead_code)]
 pub const BITAXE_SYSTEM_INFO_RESPONSE: &str = r#"{
     "ASICModel": "BM1368",
     "boardVersion": "204",
@@ -18,69 +19,68 @@ pub const BITAXE_SYSTEM_INFO_RESPONSE: &str = r#"{
     "fanSpeed": 75,
     "fanRPM": 3450,
     "temp": 65.5,
-    "vrTemp": 68.2,
-    "hashRate": 485.2,
-    "bestDiff": "123.45K",
-    "bestSessionDiff": "567.89K",
-    "freeHeap": 123456,
-    "coreVoltage": 1.2,
-    "coreVoltageActual": 1.19,
+    "hashrate": 450.5,
+    "powerConsumption": 10.5,
+    "efficiency": 23.3,
     "uptimeSeconds": 3600,
-    "ssid": "TestNetwork",
-    "sharesAccepted": 150,
-    "sharesRejected": 2
+    "sharesAccepted": 42,
+    "sharesRejected": 1,
+    "bestDifficulty": 123456,
+    "difficultyAccepted": 100000,
+    "difficultyRejected": 1000,
+    "fanspeed": [75],
+    "fanrpm": [3450]
 }"#;
 
+#[allow(dead_code)]
 pub const NERDQAXE_SYSTEM_INFO_RESPONSE: &str = r#"{
-    "asic_model": "BM1368",
-    "board_version": "v1.0",
-    "firmware_version": "1.5.2",
-    "mac_address": "11:22:33:44:55:66",
+    "name": "NerdQAxe++",
     "hostname": "nerdqaxe-test",
-    "wifi": {
+    "mac": "BB:CC:DD:EE:FF:AA",
+    "version": "1.5.0",
+    "network": {
         "ssid": "TestNetwork",
         "status": "connected",
-        "rssi": -52
-    },
-    "pool": {
-        "url": "stratum+tcp://test.pool.com",
-        "port": 4334,
-        "user": "bc1qtest456"
-    },
-    "settings": {
-        "frequency": 500,
-        "voltage": 1250,
-        "fan_speed": 80
-    },
-    "sensors": {
-        "temperature": 62.8,
-        "vr_temperature": 65.1,
-        "fan_rpm": 3600
+        "rssi": -50
     },
     "mining": {
-        "hashrate": 512.7,
-        "best_diff": "234.56K",
-        "shares": {
-            "accepted": 225,
-            "rejected": 3
+        "pool": {
+            "url": "stratum+tcp://test.pool.com:3333",
+            "user": "bc1qtest456"
         },
-        "uptime": 7200
+        "stats": {
+            "hashrate": 550.0,
+            "shares": {
+                "accepted": 100,
+                "rejected": 2
+            },
+            "uptime": 7200
+        }
     },
-    "system": {
-        "free_heap": 98765,
-        "core_voltage": 1.25,
-        "actual_voltage": 1.24
+    "hardware": {
+        "temp": 68.0,
+        "fans": [
+            {
+                "speed": 80,
+                "rpm": 3600
+            }
+        ],
+        "power": 12.0,
+        "efficiency": 21.8
     }
 }"#;
 
+#[allow(dead_code)]
 pub const BITAXE_ERROR_RESPONSE: &str = r#"{
     "error": "Invalid command",
     "code": 400
 }"#;
 
+#[allow(dead_code)]
 pub const NETWORK_TIMEOUT_ERROR: &str = "Network timeout after 5 seconds";
 
 /// Helper function to create a mock server response
+#[allow(dead_code)]
 pub fn mock_device_response(device_type: &str) -> &'static str {
     match device_type {
         "bitaxe" => BITAXE_SYSTEM_INFO_RESPONSE,
@@ -93,34 +93,31 @@ pub fn mock_device_response(device_type: &str) -> &'static str {
 pub mod mdns {
     use std::net::IpAddr;
 
+    #[allow(dead_code)]
     pub struct MockMdnsDevice {
-        pub name: String,
-        pub ip_addresses: Vec<IpAddr>,
+        pub service_type: String,
         pub port: u16,
-        pub txt_records: Vec<(String, String)>,
+        pub addresses: Vec<IpAddr>,
+        pub hostname: String,
     }
 
+    #[allow(dead_code)]
     pub fn create_mock_bitaxe() -> MockMdnsDevice {
         MockMdnsDevice {
-            name: "bitaxe-test._http._tcp.local.".to_string(),
-            ip_addresses: vec!["192.168.1.100".parse().unwrap()],
+            service_type: "_http._tcp.local.".to_string(),
             port: 80,
-            txt_records: vec![
-                ("version".to_string(), "2.0.0".to_string()),
-                ("model".to_string(), "bitaxe".to_string()),
-            ],
+            addresses: vec!["192.168.1.100".parse().unwrap()],
+            hostname: "bitaxe-test.local".to_string(),
         }
     }
 
+    #[allow(dead_code)]
     pub fn create_mock_nerdqaxe() -> MockMdnsDevice {
         MockMdnsDevice {
-            name: "nerdqaxe-test._http._tcp.local.".to_string(),
-            ip_addresses: vec!["192.168.1.101".parse().unwrap()],
+            service_type: "_http._tcp.local.".to_string(),
             port: 80,
-            txt_records: vec![
-                ("version".to_string(), "1.5.2".to_string()),
-                ("model".to_string(), "nerdqaxe".to_string()),
-            ],
+            addresses: vec!["192.168.1.101".parse().unwrap()],
+            hostname: "nerdqaxe-test.local".to_string(),
         }
     }
 }

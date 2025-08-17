@@ -455,8 +455,8 @@ async fn test_concurrent_monitoring() -> Result<()> {
     assert_eq!(all_stats.len(), 3);
 
     // Check that each device has collected multiple stats
-    for i in 0..3 {
-        let device_ip = servers[i].url();
+    for server in servers.iter().take(3) {
+        let device_ip = server.url();
         let history = storage.get_device_stats_history(&device_ip, None)?;
         assert_eq!(history.len(), 5); // 5 monitoring cycles
     }

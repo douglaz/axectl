@@ -387,7 +387,7 @@ async fn test_mdns_discovery_simulation() -> Result<()> {
     let discovery = MdnsDiscovery::with_timeout(Duration::from_millis(100));
 
     // This will typically find no devices in test environment but should complete successfully
-    let devices = discovery.discover_devices().await?;
+    let _devices = discovery.discover_devices().await?;
 
     // Verify the discovery completed without errors
     // In most test environments, we expect no devices to be found
