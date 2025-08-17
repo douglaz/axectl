@@ -83,3 +83,137 @@ impl NerdQaxeInfoResponse {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SAMPLE_NERDQAXE_RESPONSE: &str = r#"{
+        "deviceModel": "NerdQAxe++",
+        "ASICModel": "BM1368",
+        "version": "1.5.2",
+        "macAddr": "11:22:33:44:55:66",
+        "hostname": "nerdqaxe-test",
+        "hostip": "192.168.1.101",
+        "ssid": "TestNetwork",
+        "wifiStatus": "Connected",
+        "wifiRSSI": -52,
+        "stratumURL": "stratum+tcp://test.pool.com",
+        "stratumPort": 4334,
+        "stratumUser": "bc1qtest456",
+        "frequency": 500,
+        "voltage": 1250,
+        "fanspeed": 80,
+        "temp": 62.8,
+        "power": 18.5,
+        "hashRate": 512.7,
+        "uptimeSeconds": 7200,
+        "sharesAccepted": 225,
+        "sharesRejected": 3,
+        "bestDiff": "234.56K",
+        "runningPartition": "firmware_a"
+    }"#;
+
+    #[test]
+    fn test_nerdqaxe_parsing() {
+        let response: NerdQaxeInfoResponse =
+            serde_json::from_str(SAMPLE_NERDQAXE_RESPONSE).unwrap();
+
+        assert_eq!(response.device_model, "NerdQAxe++");
+        assert_eq!(response.asic_model, "BM1368");
+        assert_eq!(response.version, Some("1.5.2".to_string()));
+        assert_eq!(response.mac_address, "11:22:33:44:55:66");
+        assert_eq!(response.hostname, "nerdqaxe-test");
+        assert_eq!(response.host_ip, Some("192.168.1.101".to_string()));
+        assert_eq!(response.ssid, Some("TestNetwork".to_string()));
+        assert_eq!(response.pool_url, "stratum+tcp://test.pool.com");
+        assert_eq!(response.pool_port, 4334);
+        assert_eq!(response.frequency, 500);
+        assert_eq!(response.voltage, 1250.0);
+        assert_eq!(response.temp, 62.8);
+        assert_eq!(response.hash_rate, 512.7);
+        assert_eq!(response.shares_accepted, 225);
+        assert_eq!(response.shares_rejected, 3);
+    }
+
+    #[test]
+    fn test_nerdqaxe_minimal_response() {
+        let minimal_response = r#"{
+            "deviceModel": "NerdQAxe+",
+            "ASICModel": "BM1368",
+            "macAddr": "11:22:33:44:55:66",
+            "hostname": "nerdqaxe-minimal",
+            "stratumURL": "stratum+tcp://pool.com",
+            "stratumPort": 4334,
+            "stratumUser": "user456",
+            "frequency": 450,
+            "voltage": 1200,
+            "fanspeed": 70,
+            "temp": 58.0,
+            "power": 16.2,
+            "hashRate": 450.0,
+            "uptimeSeconds": 3600,
+            "sharesAccepted": 180,
+            "sharesRejected": 2
+        }"#;
+
+        let response: NerdQaxeInfoResponse = serde_json::from_str(minimal_response).unwrap();
+        assert_eq!(response.hostname, "nerdqaxe-minimal");
+        assert_eq!(response.version, None);
+        assert_eq!(response.ssid, None);
+        assert_eq!(response.host_ip, None);
+    }
+
+    #[test]
+    fn test_nerdqaxe_to_unified_info() {
+        let response: NerdQaxeInfoResponse =
+            serde_json::from_str(SAMPLE_NERDQAXE_RESPONSE).unwrap();
+        let unified = response.to_unified_info();
+
+        assert_eq!(unified.hostname, "nerdqaxe-test");
+        assert_eq!(unified.asic_model, "BM1368");
+        assert_eq!(unified.board_version, "unknown"); // NerdQAxe doesn't provide board version
+        assert_eq!(unified.firmware_version, "1.5.2");
+        assert_eq!(unified.mac_address, "11:22:33:44:55:66");
+        assert_eq!(unified.wifi_ssid, Some("TestNetwork".to_string()));
+        assert_eq!(unified.pool_url, "stratum+tcp://test.pool.com");
+        assert_eq!(unified.pool_port, 4334);
+        assert_eq!(unified.frequency, 500);
+        assert_eq!(unified.voltage, 1250.0);
+    }
+
+    #[test]
+    fn test_nerdqaxe_to_unified_stats() {
+        let response: NerdQaxeInfoResponse =
+            serde_json::from_str(SAMPLE_NERDQAXE_RESPONSE).unwrap();
+        let stats = response.to_unified_stats();
+
+        assert_eq!(stats.hashrate, 512.7);
+        assert_eq!(stats.temp, 62.8);
+        assert_eq!(stats.power, 18.5);
+        assert_eq!(stats.fanspeed, 80);
+        assert_eq!(stats.shares_accepted, 225);
+        assert_eq!(stats.shares_rejected, 3);
+        assert_eq!(stats.uptime, 7200);
+        assert_eq!(stats.best_difficulty, Some("234.56K".to_string()));
+        assert_eq!(stats.session_id, Some("firmware_a".to_string()));
+    }
+
+    #[test]
+    fn test_nerdqaxe_invalid_json() {
+        let invalid_json = r#"{"invalid": "json"}"#;
+        let result: Result<NerdQaxeInfoResponse, _> = serde_json::from_str(invalid_json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_nerdqaxe_partial_json() {
+        // Test with missing required fields
+        let partial_json = r#"{
+            "deviceModel": "NerdQAxe++",
+            "ASICModel": "BM1368"
+        }"#;
+        let result: Result<NerdQaxeInfoResponse, _> = serde_json::from_str(partial_json);
+        assert!(result.is_err());
+    }
+}
