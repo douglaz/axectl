@@ -1,3 +1,4 @@
+use crate::api::DeviceType;
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
@@ -84,9 +85,9 @@ pub enum Commands {
         #[arg(long)]
         no_mdns: bool,
 
-        /// Filter devices by type (e.g., bitaxe, nerdqaxe, bitaxe-ultra)
+        /// Filter devices by type (e.g., bitaxe-ultra, bitaxe-max, nerdqaxe)
         #[arg(long, value_name = "TYPE")]
-        device_type: Option<String>,
+        device_type: Option<DeviceType>,
 
         /// Alert on high temperature (celsius, only with --watch)
         #[arg(long)]
@@ -131,7 +132,7 @@ pub enum Commands {
 
         /// Monitor only devices of a specific type
         #[arg(long, value_name = "TYPE")]
-        device_type: Option<String>,
+        device_type: Option<DeviceType>,
 
         /// Show per-type summaries
         #[arg(long)]
@@ -181,7 +182,7 @@ pub enum BulkAction {
     Restart {
         /// Filter by device type (can be specified multiple times)
         #[arg(long = "device-type", value_name = "TYPE")]
-        device_types: Vec<String>,
+        device_types: Vec<DeviceType>,
         /// Target specific IP addresses (can be specified multiple times)
         #[arg(long = "ip-address", value_name = "IP")]
         ip_addresses: Vec<String>,
@@ -199,7 +200,7 @@ pub enum BulkAction {
         speed: u8,
         /// Filter by device type (can be specified multiple times)
         #[arg(long = "device-type", value_name = "TYPE")]
-        device_types: Vec<String>,
+        device_types: Vec<DeviceType>,
         /// Target specific IP addresses (can be specified multiple times)
         #[arg(long = "ip-address", value_name = "IP")]
         ip_addresses: Vec<String>,
@@ -217,7 +218,7 @@ pub enum BulkAction {
         settings: String,
         /// Filter by device type (can be specified multiple times)
         #[arg(long = "device-type", value_name = "TYPE")]
-        device_types: Vec<String>,
+        device_types: Vec<DeviceType>,
         /// Target specific IP addresses (can be specified multiple times)
         #[arg(long = "ip-address", value_name = "IP")]
         ip_addresses: Vec<String>,
@@ -233,7 +234,7 @@ pub enum BulkAction {
     WifiScan {
         /// Filter by device type (can be specified multiple times)
         #[arg(long = "device-type", value_name = "TYPE")]
-        device_types: Vec<String>,
+        device_types: Vec<DeviceType>,
         /// Target specific IP addresses (can be specified multiple times)
         #[arg(long = "ip-address", value_name = "IP")]
         ip_addresses: Vec<String>,
@@ -248,7 +249,7 @@ pub enum BulkAction {
         firmware: String,
         /// Filter by device type (can be specified multiple times)
         #[arg(long = "device-type", value_name = "TYPE")]
-        device_types: Vec<String>,
+        device_types: Vec<DeviceType>,
         /// Target specific IP addresses (can be specified multiple times)
         #[arg(long = "ip-address", value_name = "IP")]
         ip_addresses: Vec<String>,
@@ -269,7 +270,7 @@ pub enum BulkAction {
         axeos: String,
         /// Filter by device type (can be specified multiple times)
         #[arg(long = "device-type", value_name = "TYPE")]
-        device_types: Vec<String>,
+        device_types: Vec<DeviceType>,
         /// Target specific IP addresses (can be specified multiple times)
         #[arg(long = "ip-address", value_name = "IP")]
         ip_addresses: Vec<String>,

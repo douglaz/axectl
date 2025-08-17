@@ -1,4 +1,4 @@
-use crate::api::{AxeOsClient, Device, DeviceStatus, SystemUpdateRequest};
+use crate::api::{AxeOsClient, Device, DeviceStatus, DeviceType, SystemUpdateRequest};
 use crate::cache::DeviceCache;
 use crate::cli::commands::{BulkAction, OutputFormat};
 use crate::output::{print_error, print_info, print_json, print_success, print_warning};
@@ -163,7 +163,7 @@ pub async fn bulk(
 /// Filter devices based on criteria
 fn filter_devices(
     cache: &DeviceCache,
-    device_types: &[String],
+    device_types: &[DeviceType],
     ip_addresses: &[String],
     all: bool,
 ) -> Result<Vec<Device>> {
@@ -176,7 +176,7 @@ fn filter_devices(
 
     // Filter by device types
     for device_type in device_types {
-        let type_devices = cache.get_online_devices_by_type_filter(device_type);
+        let type_devices = cache.get_online_devices_by_type_filter(&device_type.to_string());
         for device in type_devices {
             if !devices
                 .iter()

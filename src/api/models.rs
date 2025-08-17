@@ -2,6 +2,7 @@ use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use strum::{Display, EnumString, IntoStaticStr, VariantNames};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Device {
@@ -20,17 +21,36 @@ pub struct Device {
 // Compatibility alias during migration
 pub type DeviceInfo = Device;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Eq,
+    Hash,
+    Display,
+    EnumString,
+    VariantNames,
+    IntoStaticStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum DeviceType {
     #[serde(rename = "bitaxe_ultra")]
+    #[strum(serialize = "bitaxe-ultra")]
     BitaxeUltra,
     #[serde(rename = "bitaxe_max")]
+    #[strum(serialize = "bitaxe-max")]
     BitaxeMax,
     #[serde(rename = "bitaxe_gamma")]
+    #[strum(serialize = "bitaxe-gamma")]
     BitaxeGamma,
     #[serde(rename = "nerdqaxe_plus")]
+    #[strum(serialize = "nerdqaxe-plus")]
     NerdqaxePlus,
     #[serde(rename = "unknown")]
+    #[strum(serialize = "unknown")]
     Unknown,
 }
 
@@ -88,7 +108,7 @@ impl DeviceType {
                 self,
                 DeviceType::BitaxeUltra | DeviceType::BitaxeMax | DeviceType::BitaxeGamma
             ),
-            _ => self.cli_name() == filter.to_lowercase(),
+            _ => self.to_string().to_lowercase() == filter.to_lowercase(),
         }
     }
 }
