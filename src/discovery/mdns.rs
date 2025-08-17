@@ -342,4 +342,217 @@ mod tests {
         // but the function should complete successfully
         println!("Found {} devices via mDNS", devices.len());
     }
+
+    #[tokio::test]
+    async fn test_discover_with_services() {
+        let services = vec!["_test._tcp.local.".to_string()];
+        let result = discover_with_services(services, Duration::from_millis(100)).await;
+        assert!(result.is_ok());
+
+        let _devices = result.unwrap();
+        // Should complete without error, even if no devices found
+        // Length is always >= 0, so we just verify it completed successfully
+    }
+
+    #[test]
+    fn test_is_potential_axeos_device_negative_cases() {
+        let discovery = MdnsDiscovery::new();
+
+        // Test device that shouldn't be detected
+        let device = MdnsDevice {
+            hostname: "router.local".to_string(),
+            ip_addresses: vec![],
+            port: 22,
+            service_type: "_ssh._tcp.local.".to_string(),
+            txt_records: HashMap::new(),
+        };
+        assert!(!discovery.is_potential_axeos_device(&device));
+
+        // Test with different port and no matching criteria
+        let device = MdnsDevice {
+            hostname: "printer.local".to_string(),
+            ip_addresses: vec![],
+            port: 631,
+            service_type: "_ipp._tcp.local.".to_string(),
+            txt_records: HashMap::new(),
+        };
+        assert!(!discovery.is_potential_axeos_device(&device));
+    }
+
+    #[test]
+    fn test_is_potential_axeos_device_nerdqaxe() {
+        let discovery = MdnsDiscovery::new();
+
+        // Test NerdQAxe hostname detection
+        let device = MdnsDevice {
+            hostname: "nerdqaxe-plus.local".to_string(),
+            ip_addresses: vec![],
+            port: 80,
+            service_type: "_http._tcp.local.".to_string(),
+            txt_records: HashMap::new(),
+        };
+        assert!(discovery.is_potential_axeos_device(&device));
+    }
+
+    #[test]
+    fn test_is_potential_axeos_device_firmware_detection() {
+        let discovery = MdnsDiscovery::new();
+
+        // Test firmware version detection in TXT records
+        let mut txt_records = HashMap::new();
+        txt_records.insert("firmware".to_string(), "AxeOS v2.0.0".to_string());
+        let device = MdnsDevice {
+            hostname: "miner.local".to_string(),
+            ip_addresses: vec![],
+            port: 8080,
+            service_type: "_http._tcp.local.".to_string(),
+            txt_records,
+        };
+        assert!(discovery.is_potential_axeos_device(&device));
+    }
+
+    #[test]
+    fn test_is_potential_axeos_device_port_80() {
+        let discovery = MdnsDiscovery::new();
+
+        // Test port 80 detection for generic device
+        let device = MdnsDevice {
+            hostname: "device123.local".to_string(),
+            ip_addresses: vec![],
+            port: 80,
+            service_type: "_other._tcp.local.".to_string(),
+            txt_records: HashMap::new(),
+        };
+        assert!(discovery.is_potential_axeos_device(&device));
+    }
+
+    #[test]
+    fn test_is_potential_axeos_device_http_service() {
+        let discovery = MdnsDiscovery::new();
+
+        // Test _http._tcp service detection (should return true by default)
+        let device = MdnsDevice {
+            hostname: "webserver.local".to_string(),
+            ip_addresses: vec![],
+            port: 8080,
+            service_type: "_http._tcp.local.".to_string(),
+            txt_records: HashMap::new(),
+        };
+        assert!(discovery.is_potential_axeos_device(&device));
+    }
+
+    #[test]
+    fn test_mdns_device_structure() {
+        use std::net::Ipv4Addr;
+
+        let mut txt_records = HashMap::new();
+        txt_records.insert("version".to_string(), "2.0.0".to_string());
+        txt_records.insert("model".to_string(), "Bitaxe Max".to_string());
+
+        let device = MdnsDevice {
+            hostname: "bitaxe-test.local".to_string(),
+            ip_addresses: vec![IpAddr::V4(Ipv4Addr::new(192, 168, 1, 100))],
+            port: 80,
+            service_type: "_http._tcp.local.".to_string(),
+            txt_records: txt_records.clone(),
+        };
+
+        assert_eq!(device.hostname, "bitaxe-test.local");
+        assert_eq!(device.ip_addresses.len(), 1);
+        assert_eq!(device.port, 80);
+        assert_eq!(device.service_type, "_http._tcp.local.");
+        assert_eq!(device.txt_records, txt_records);
+    }
+
+    #[test]
+    fn test_mdns_discovery_default() {
+        let discovery1 = MdnsDiscovery::default();
+        let discovery2 = MdnsDiscovery::new();
+
+        assert_eq!(discovery1.service_names, discovery2.service_names);
+        assert_eq!(discovery1.discovery_timeout, discovery2.discovery_timeout);
+    }
+
+    #[test]
+    fn test_mdns_discovery_builder_pattern() {
+        let services = vec!["_custom._tcp.local.".to_string()];
+        let timeout = Duration::from_secs(3);
+
+        let mut discovery = MdnsDiscovery::with_service_names(services.clone());
+        discovery.discovery_timeout = timeout;
+
+        assert_eq!(discovery.service_names, services);
+        assert_eq!(discovery.discovery_timeout, timeout);
+    }
+
+    #[test]
+    fn test_mdns_discovery_service_list() {
+        let discovery = MdnsDiscovery::new();
+
+        // Verify default services include expected ones
+        assert!(discovery
+            .service_names
+            .contains(&"_http._tcp.local.".to_string()));
+        assert!(discovery
+            .service_names
+            .contains(&"_https._tcp.local.".to_string()));
+        assert!(discovery
+            .service_names
+            .contains(&"_axeos._tcp.local.".to_string()));
+        assert!(discovery
+            .service_names
+            .contains(&"_bitaxe._tcp.local.".to_string()));
+        assert!(discovery
+            .service_names
+            .contains(&"_nerdqaxe._tcp.local.".to_string()));
+        assert_eq!(discovery.service_names.len(), 5);
+    }
+
+    #[test]
+    fn test_is_potential_axeos_device_case_insensitive() {
+        let discovery = MdnsDiscovery::new();
+
+        // Test case insensitive hostname matching
+        let device = MdnsDevice {
+            hostname: "BITAXE-ULTRA.local".to_string(),
+            ip_addresses: vec![],
+            port: 80,
+            service_type: "_http._tcp.local.".to_string(),
+            txt_records: HashMap::new(),
+        };
+        assert!(discovery.is_potential_axeos_device(&device));
+
+        // Test case insensitive TXT record matching
+        let mut txt_records = HashMap::new();
+        txt_records.insert("MODEL".to_string(), "NERDQAXE PLUS".to_string());
+        let device = MdnsDevice {
+            hostname: "device.local".to_string(),
+            ip_addresses: vec![],
+            port: 8080,
+            service_type: "_http._tcp.local.".to_string(),
+            txt_records,
+        };
+        assert!(discovery.is_potential_axeos_device(&device));
+    }
+
+    #[test]
+    fn test_is_potential_axeos_device_comprehensive() {
+        let discovery = MdnsDiscovery::new();
+
+        // Test all detection methods in a single device
+        let mut txt_records = HashMap::new();
+        txt_records.insert("model".to_string(), "Bitaxe Ultra".to_string());
+        txt_records.insert("firmware".to_string(), "AxeOS v2.1.0".to_string());
+
+        let device = MdnsDevice {
+            hostname: "bitaxe-ultra-001.local".to_string(),
+            ip_addresses: vec![],
+            port: 80,
+            service_type: "_axeos._tcp.local.".to_string(),
+            txt_records,
+        };
+
+        // Should be detected by multiple criteria
+        assert!(discovery.is_potential_axeos_device(&device));
+    }
 }

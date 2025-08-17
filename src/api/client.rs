@@ -420,4 +420,94 @@ mod tests {
             assert!(result.message.contains("must be between 0 and 100"));
         });
     }
+
+    #[tokio::test]
+    async fn test_get_system_info_success() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("GET", "/api/system/info")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                r#"{
+                "ASICModel": "BM1368",
+                "boardVersion": "204",
+                "version": "2.0.0",
+                "macAddr": "AA:BB:CC:DD:EE:FF",
+                "hostname": "bitaxe-test",
+                "ssid": "TestNetwork",
+                "wifiStatus": "Connected",
+                "wifiRSSI": -45,
+                "stratumURL": "stratum+tcp://test.pool.com",
+                "stratumPort": 4334,
+                "stratumUser": "bc1qtest123",
+                "frequency": 485,
+                "voltage": 1200,
+                "fanspeed": 75,
+                "temp": 65.5,
+                "power": 15.8,
+                "hashRate": 485.2,
+                "uptimeSeconds": 3600,
+                "sharesAccepted": 150,
+                "sharesRejected": 2,
+                "bestDiff": "123.45K"
+            }"#,
+            )
+            .create_async()
+            .await;
+
+        let client = AxeOsClient::new(&server.url()).unwrap();
+        let result = client.get_system_info().await;
+
+        mock.assert_async().await;
+        assert!(result.is_ok());
+
+        let info = result.unwrap();
+        assert_eq!(info.hostname, "bitaxe-test");
+        assert_eq!(info.asic_model, "BM1368");
+    }
+
+    #[tokio::test]
+    async fn test_get_system_info_network_error() {
+        let client = AxeOsClient::new("http://nonexistent.local").unwrap();
+        let result = client.get_system_info().await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_set_fan_speed_success() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("PATCH", "/api/system")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"success": true, "message": "Fan speed set to 75%"}"#)
+            .create_async()
+            .await;
+
+        let client = AxeOsClient::new(&server.url()).unwrap();
+        let result = client.set_fan_speed(75).await.unwrap();
+
+        mock.assert_async().await;
+        assert!(result.success);
+        assert!(result
+            .message
+            .contains("System settings updated successfully"));
+    }
+
+    #[tokio::test]
+    async fn test_http_error_codes() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("GET", "/api/system/info")
+            .with_status(404)
+            .create_async()
+            .await;
+
+        let client = AxeOsClient::new(&server.url()).unwrap();
+        let result = client.get_system_info().await;
+
+        mock.assert_async().await;
+        assert!(result.is_err());
+    }
 }
