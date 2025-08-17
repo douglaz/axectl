@@ -1,10 +1,5 @@
-pub mod device_control;
-/// Integration tests for axectl
-///
-/// These tests verify end-to-end workflows and component interactions:
-/// - Complete discovery workflows with mock devices
-/// - Monitoring and alerting systems
-/// - Device control operations
-/// - Cross-module integration
-pub mod discovery_workflow;
-pub mod monitoring_alerts;
+// Integration tests for axectl
+//
+// These tests verify end-to-end workflows and component interactions
+// Currently no integration tests - the storage-based tests were removed
+// as part of the refactoring to eliminate groups and storage modules

@@ -8,14 +8,21 @@ pub async fn control(
     action: ControlAction,
     format: OutputFormat,
     color: bool,
-    _cache_dir: Option<&Path>,
+    cache_dir: Option<&Path>,
 ) -> Result<()> {
     use crate::api::{AxeOsClient, SystemUpdateRequest};
+    use crate::cache::DeviceCache;
     use crate::output::{print_error, print_info, print_json, print_success};
-    use crate::storage::GLOBAL_STORAGE;
+
+    // Load cache to find device
+    let cache = if let Some(cache_path) = cache_dir {
+        DeviceCache::load(cache_path)?
+    } else {
+        DeviceCache::new()
+    };
 
     // Find the device
-    let device_info = if let Some(dev) = GLOBAL_STORAGE.find_device(&device)? {
+    let device_info = if let Some(dev) = cache.find_device(&device) {
         dev
     } else {
         match format {

@@ -4,12 +4,12 @@ use std::net::IpAddr;
 use std::time::Duration;
 use tokio::time::timeout;
 
-use crate::api::{AxeOsClient, DeviceInfo, DeviceStatus, DeviceType};
+use crate::api::{AxeOsClient, Device, DeviceStatus, DeviceType};
 use crate::discovery::network::{get_network_addresses, NetworkInfo};
 
 #[derive(Debug, Clone)]
 pub struct ScanResult {
-    pub devices_found: Vec<DeviceInfo>,
+    pub devices_found: Vec<Device>,
     pub scan_info: ScanInfo,
 }
 
@@ -87,7 +87,7 @@ pub async fn scan_network(network: IpNetwork, config: ScanConfig) -> Result<Scan
 async fn scan_addresses_parallel(
     addresses: Vec<IpAddr>,
     config: ScanConfig,
-) -> Result<Vec<DeviceInfo>> {
+) -> Result<Vec<Device>> {
     use futures::stream::{self, StreamExt};
 
     let devices = stream::iter(addresses)
@@ -108,7 +108,7 @@ async fn scan_addresses_parallel(
     Ok(found_devices)
 }
 
-async fn scan_single_address(ip: IpAddr, config: ScanConfig) -> Result<Option<DeviceInfo>> {
+async fn scan_single_address(ip: IpAddr, config: ScanConfig) -> Result<Option<Device>> {
     let ip_str = ip.to_string();
 
     // Create AxeOS client with appropriate timeout
@@ -123,7 +123,7 @@ async fn scan_single_address(ip: IpAddr, config: ScanConfig) -> Result<Option<De
             if let Ok(Ok((system_info, device_type))) =
                 timeout(config.timeout_per_host, client.get_complete_device_info()).await
             {
-                let device = DeviceInfo {
+                let device = Device {
                     name: system_info.hostname.clone(),
                     ip_address: ip_str,
                     device_type,
@@ -131,6 +131,7 @@ async fn scan_single_address(ip: IpAddr, config: ScanConfig) -> Result<Option<De
                     status: DeviceStatus::Online,
                     discovered_at: chrono::Utc::now(),
                     last_seen: chrono::Utc::now(),
+                    stats: None,
                 };
 
                 return Ok(Some(device));
@@ -139,7 +140,7 @@ async fn scan_single_address(ip: IpAddr, config: ScanConfig) -> Result<Option<De
             // If we can't get system info but health check passed,
             // it might be an AxeOS device that's not fully responsive
             if !config.axeos_only {
-                let device = DeviceInfo {
+                let device = Device {
                     name: format!("Unknown-{ip_str}"),
                     ip_address: ip_str,
                     device_type: DeviceType::Unknown,
@@ -147,6 +148,7 @@ async fn scan_single_address(ip: IpAddr, config: ScanConfig) -> Result<Option<De
                     status: DeviceStatus::Online,
                     discovered_at: chrono::Utc::now(),
                     last_seen: chrono::Utc::now(),
+                    stats: None,
                 };
 
                 return Ok(Some(device));
@@ -155,7 +157,7 @@ async fn scan_single_address(ip: IpAddr, config: ScanConfig) -> Result<Option<De
         Ok(Ok(false)) | Ok(Err(_)) | Err(_) => {
             // Device not responsive or error
             if config.include_unreachable {
-                let device = DeviceInfo {
+                let device = Device {
                     name: format!("Offline-{ip_str}"),
                     ip_address: ip_str,
                     device_type: DeviceType::Unknown,
@@ -163,6 +165,7 @@ async fn scan_single_address(ip: IpAddr, config: ScanConfig) -> Result<Option<De
                     status: DeviceStatus::Offline,
                     discovered_at: chrono::Utc::now(),
                     last_seen: chrono::Utc::now(),
+                    stats: None,
                 };
 
                 return Ok(Some(device));
@@ -174,7 +177,7 @@ async fn scan_single_address(ip: IpAddr, config: ScanConfig) -> Result<Option<De
 }
 
 /// Scan a single IP address to check if it's running AxeOS
-pub async fn probe_single_device(ip: &str, timeout: Duration) -> Result<Option<DeviceInfo>> {
+pub async fn probe_single_device(ip: &str, timeout: Duration) -> Result<Option<Device>> {
     let config = ScanConfig {
         timeout_per_host: timeout,
         axeos_only: true,

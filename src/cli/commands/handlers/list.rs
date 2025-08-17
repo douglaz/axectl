@@ -63,13 +63,12 @@ struct BasicDeviceTableRow {
 }
 
 pub async fn list(args: ListArgs<'_>) -> Result<()> {
-    use crate::api::DeviceStatus;
+    use crate::api::{DeviceStatus, SwarmSummary};
     use crate::cache::DeviceCache;
     use crate::output::{
         format_hashrate, format_power, format_table, format_uptime, print_error, print_info,
         print_json, print_success, print_warning, ColoredTemperature,
     };
-    use crate::storage::GLOBAL_STORAGE;
     use std::collections::HashMap;
 
     // Track previous hashrates for drop detection
@@ -129,55 +128,31 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
             }
         }
 
-        // Try to load from cache first
-        let mut devices = Vec::new();
-        let mut _from_cache = false;
-        let cache_age_minutes;
+        // Load from cache
+        let mut cache = DeviceCache::load(cache_path)?;
 
-        match DeviceCache::load(cache_path) {
-            Ok(cache) => {
-                if !cache.is_empty() {
-                    // Apply type filtering if specified
-                    devices = if let Some(ref type_filter) = args.device_type {
-                        if args.all {
-                            cache.get_devices_by_type_filter(type_filter)
-                        } else {
-                            cache.get_online_devices_by_type_filter(type_filter)
-                        }
-                    } else if args.all {
-                        cache.get_all_devices()
-                    } else {
-                        cache.get_devices_by_status(DeviceStatus::Online)
-                    };
-                    _from_cache = true;
-                    cache_age_minutes = cache.age_seconds() / 60;
+        // Apply type filtering if specified
+        let devices = if let Some(ref type_filter) = args.device_type {
+            if args.all {
+                cache.get_devices_by_type_filter(type_filter)
+            } else {
+                cache.get_online_devices_by_type_filter(type_filter)
+            }
+        } else if args.all {
+            cache.get_all_devices()
+        } else {
+            cache.get_devices_by_status(DeviceStatus::Online)
+        };
 
-                    if !devices.is_empty() && args.format == OutputFormat::Text && !args.watch {
-                        print_warning(
-                            &format!(
-                                "📦 Showing cached devices ({} minutes old)",
-                                cache_age_minutes
-                            ),
-                            args.color,
-                        );
-                    }
-                }
-            }
-            Err(e) => {
-                tracing::warn!("Failed to load cache: {}", e);
-                // Try memory storage as fallback
-                devices = if let Some(ref type_filter) = args.device_type {
-                    if args.all {
-                        GLOBAL_STORAGE.get_devices_by_type_filter(type_filter)?
-                    } else {
-                        GLOBAL_STORAGE.get_online_devices_by_type_filter(type_filter)?
-                    }
-                } else if args.all {
-                    GLOBAL_STORAGE.get_all_devices()?
-                } else {
-                    GLOBAL_STORAGE.get_devices_by_status(DeviceStatus::Online)?
-                };
-            }
+        let cache_age_minutes = cache.age_seconds() / 60;
+        if !devices.is_empty() && args.format == OutputFormat::Text && !args.watch {
+            print_warning(
+                &format!(
+                    "📦 Showing cached devices ({} minutes old)",
+                    cache_age_minutes
+                ),
+                args.color,
+            );
         }
 
         if devices.is_empty() {
@@ -210,12 +185,7 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
             return Ok(());
         }
 
-        // Store devices in global storage for type summaries and other operations
-        for device in &devices {
-            if let Err(e) = GLOBAL_STORAGE.upsert_device(device.clone()) {
-                tracing::warn!("Failed to save device to storage: {}", e);
-            }
-        }
+        // Note: devices are already in cache, no need to store separately
 
         // Collect stats if not in no-stats mode
         let mut device_stats = Vec::new();
@@ -262,10 +232,8 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
                                 }
                             }
 
-                            // Store stats in global storage
-                            if let Err(e) = GLOBAL_STORAGE.store_stats(stats.clone()) {
-                                tracing::warn!("Failed to store stats: {}", e);
-                            }
+                            // Update stats in cache
+                            cache.update_device_stats(&device.ip_address, stats.clone());
                             device_stats.push(Some(stats));
                         }
                         Err(e) => {
@@ -274,9 +242,8 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
                                 device.ip_address,
                                 e
                             );
-                            // Mark device as offline if we can't get stats
-                            let _ = GLOBAL_STORAGE
-                                .update_device_status(&device.ip_address, DeviceStatus::Offline);
+                            // Mark device as offline in cache
+                            cache.mark_device_probed(&device.ip_address, false);
                             device_stats.push(None);
 
                             // Add offline alert if in watch mode
@@ -324,7 +291,52 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
                         })
                         .collect();
 
-                    let swarm_summary = GLOBAL_STORAGE.get_swarm_summary()?;
+                    // Calculate swarm summary from devices with stats
+                    let online_devices: Vec<_> = devices
+                        .iter()
+                        .zip(device_stats.iter())
+                        .filter_map(|(device, stats)| stats.as_ref().map(|s| (device, s)))
+                        .collect();
+
+                    let swarm_summary = if online_devices.is_empty() {
+                        SwarmSummary::default()
+                    } else {
+                        SwarmSummary {
+                            total_devices: devices.len(),
+                            devices_online: online_devices.len(),
+                            devices_offline: devices.len() - online_devices.len(),
+                            total_hashrate_mhs: online_devices
+                                .iter()
+                                .map(|(_, s)| s.hashrate_mhs)
+                                .sum(),
+                            total_power_watts: online_devices
+                                .iter()
+                                .map(|(_, s)| s.power_watts)
+                                .sum(),
+                            average_temperature: online_devices
+                                .iter()
+                                .map(|(_, s)| s.temperature_celsius)
+                                .sum::<f64>()
+                                / online_devices.len() as f64,
+                            average_efficiency: if online_devices
+                                .iter()
+                                .map(|(_, s)| s.power_watts)
+                                .sum::<f64>()
+                                > 0.0
+                            {
+                                online_devices
+                                    .iter()
+                                    .map(|(_, s)| s.hashrate_mhs)
+                                    .sum::<f64>()
+                                    / online_devices
+                                        .iter()
+                                        .map(|(_, s)| s.power_watts)
+                                        .sum::<f64>()
+                            } else {
+                                0.0
+                            },
+                        }
+                    };
                     let mut output = serde_json::json!({
                         "devices": devices_with_stats,
                         "total": devices.len(),
@@ -346,7 +358,7 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
 
                     // Add type summaries if requested
                     if args.type_summary {
-                        let type_summaries = GLOBAL_STORAGE.get_all_type_summaries()?;
+                        let type_summaries = cache.get_type_summaries();
                         output["type_summaries"] = serde_json::to_value(type_summaries)?;
                     }
 
@@ -474,31 +486,28 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
                         println!("📊 Device Type Summaries:");
                         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
-                        if let Ok(type_summaries) = GLOBAL_STORAGE.get_all_type_summaries() {
-                            if type_summaries.is_empty() {
-                                println!("   No devices found");
-                            } else {
-                                for summary in type_summaries {
-                                    let status_indicator = if summary.devices_online > 0 {
-                                        "🟢"
-                                    } else {
-                                        "🔴"
-                                    };
-
-                                    println!(
-                                        "{} {} ({}/{} online) | {} | {:.1}W | Avg: {:.1}°C",
-                                        status_indicator,
-                                        summary.type_name,
-                                        summary.devices_online,
-                                        summary.total_devices,
-                                        format_hashrate(summary.total_hashrate_mhs),
-                                        summary.total_power_watts,
-                                        summary.average_temperature
-                                    );
-                                }
-                            }
+                        let type_summaries = cache.get_type_summaries();
+                        if type_summaries.is_empty() {
+                            println!("   No devices found");
                         } else {
-                            println!("   Failed to retrieve type summaries");
+                            for summary in type_summaries {
+                                let status_indicator = if summary.devices_online > 0 {
+                                    "🟢"
+                                } else {
+                                    "🔴"
+                                };
+
+                                println!(
+                                    "{} {} ({}/{} online) | {} | {:.1}W | Avg: {:.1}°C",
+                                    status_indicator,
+                                    summary.type_name,
+                                    summary.devices_online,
+                                    summary.total_devices,
+                                    format_hashrate(summary.total_hashrate_mhs),
+                                    summary.total_power_watts,
+                                    summary.average_temperature
+                                );
+                            }
                         }
                     }
                 }
@@ -523,6 +532,13 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
             break;
         }
 
+        // Save cache if we updated stats
+        if !args.no_stats && !device_stats.is_empty() {
+            if let Err(e) = cache.save(cache_path) {
+                tracing::warn!("Failed to save cache: {}", e);
+            }
+        }
+
         if !matches!(args.format, OutputFormat::Json) {
             print_info(
                 &format!(
@@ -543,9 +559,5 @@ async fn collect_device_stats(device: &crate::api::DeviceInfo) -> Result<crate::
 
     let (info, stats) = client.get_complete_info().await?;
 
-    Ok(crate::api::DeviceStats::from_api_responses(
-        device.ip_address.clone(),
-        &info,
-        &stats,
-    ))
+    Ok(crate::api::DeviceStats::from_api_responses(&info, &stats))
 }

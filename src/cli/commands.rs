@@ -138,12 +138,6 @@ pub enum Commands {
         type_summary: bool,
     },
 
-    /// Manage device groups
-    Group {
-        #[command(subcommand)]
-        action: GroupAction,
-    },
-
     /// Bulk operations on groups of devices
     Bulk {
         #[command(subcommand)]
@@ -182,140 +176,85 @@ pub enum ControlAction {
 }
 
 #[derive(Subcommand)]
-pub enum GroupAction {
-    /// Create a new device group
-    Create {
-        /// Group name
-        name: String,
-        /// Optional description
-        #[arg(long, short)]
-        description: Option<String>,
-    },
-
-    /// List all groups
-    List {
-        /// Show detailed information
-        #[arg(long, short)]
-        detailed: bool,
-    },
-
-    /// Show group details
-    Show {
-        /// Group name or ID
-        group: String,
-    },
-
-    /// Delete a group
-    Delete {
-        /// Group name or ID
-        group: String,
-        /// Skip confirmation prompt
-        #[arg(long)]
-        force: bool,
-    },
-
-    /// Add device to group
-    AddDevice {
-        /// Group name or ID
-        group: String,
-        /// Device name or IP
-        device: String,
-    },
-
-    /// Remove device from group
-    RemoveDevice {
-        /// Group name or ID
-        group: String,
-        /// Device name or IP
-        device: String,
-    },
-
-    /// Add tag to group
-    AddTag {
-        /// Group name or ID
-        group: String,
-        /// Tag to add
-        tag: String,
-    },
-
-    /// Remove tag from group
-    RemoveTag {
-        /// Group name or ID
-        group: String,
-        /// Tag to remove
-        tag: String,
-    },
-
-    /// Update group details
-    Update {
-        /// Group name or ID
-        group: String,
-        /// New name
-        #[arg(long)]
-        name: Option<String>,
-        /// New description
-        #[arg(long)]
-        description: Option<String>,
-    },
-
-    /// Show group statistics
-    Stats {
-        /// Group name or ID
-        group: String,
-        /// Enable continuous monitoring
-        #[arg(long, short)]
-        watch: bool,
-        /// Update interval in seconds (with --watch)
-        #[arg(long, default_value = "30")]
-        interval: u64,
-    },
-}
-
-#[derive(Subcommand)]
 pub enum BulkAction {
-    /// Restart all devices in a group
+    /// Restart selected devices
     Restart {
-        /// Group name or ID
-        group: String,
+        /// Filter by device type (can be specified multiple times)
+        #[arg(long = "device-type", value_name = "TYPE")]
+        device_types: Vec<String>,
+        /// Target specific IP addresses (can be specified multiple times)
+        #[arg(long = "ip-address", value_name = "IP")]
+        ip_addresses: Vec<String>,
+        /// Target all devices
+        #[arg(long)]
+        all: bool,
         /// Skip confirmation prompt
         #[arg(long)]
         force: bool,
     },
 
-    /// Set fan speed for all devices in a group
+    /// Set fan speed for selected devices
     SetFanSpeed {
-        /// Group name or ID
-        group: String,
         /// Fan speed percentage (0-100)
         speed: u8,
+        /// Filter by device type (can be specified multiple times)
+        #[arg(long = "device-type", value_name = "TYPE")]
+        device_types: Vec<String>,
+        /// Target specific IP addresses (can be specified multiple times)
+        #[arg(long = "ip-address", value_name = "IP")]
+        ip_addresses: Vec<String>,
+        /// Target all devices
+        #[arg(long)]
+        all: bool,
         /// Skip confirmation prompt
         #[arg(long)]
         force: bool,
     },
 
-    /// Update settings for all devices in a group
+    /// Update settings for selected devices
     UpdateSettings {
-        /// Group name or ID
-        group: String,
         /// JSON string with settings to update
         settings: String,
+        /// Filter by device type (can be specified multiple times)
+        #[arg(long = "device-type", value_name = "TYPE")]
+        device_types: Vec<String>,
+        /// Target specific IP addresses (can be specified multiple times)
+        #[arg(long = "ip-address", value_name = "IP")]
+        ip_addresses: Vec<String>,
+        /// Target all devices
+        #[arg(long)]
+        all: bool,
         /// Skip confirmation prompt
         #[arg(long)]
         force: bool,
     },
 
-    /// Scan WiFi on all devices in a group
+    /// Scan WiFi on selected devices
     WifiScan {
-        /// Group name or ID
-        group: String,
+        /// Filter by device type (can be specified multiple times)
+        #[arg(long = "device-type", value_name = "TYPE")]
+        device_types: Vec<String>,
+        /// Target specific IP addresses (can be specified multiple times)
+        #[arg(long = "ip-address", value_name = "IP")]
+        ip_addresses: Vec<String>,
+        /// Target all devices
+        #[arg(long)]
+        all: bool,
     },
 
-    /// Update firmware on all devices in a group
+    /// Update firmware on selected devices
     UpdateFirmware {
-        /// Group name or ID
-        group: String,
         /// Firmware URL or file path
         firmware: String,
+        /// Filter by device type (can be specified multiple times)
+        #[arg(long = "device-type", value_name = "TYPE")]
+        device_types: Vec<String>,
+        /// Target specific IP addresses (can be specified multiple times)
+        #[arg(long = "ip-address", value_name = "IP")]
+        ip_addresses: Vec<String>,
+        /// Target all devices
+        #[arg(long)]
+        all: bool,
         /// Skip confirmation prompt
         #[arg(long)]
         force: bool,
@@ -324,12 +263,19 @@ pub enum BulkAction {
         parallel: usize,
     },
 
-    /// Update AxeOS on all devices in a group
+    /// Update AxeOS on selected devices
     UpdateAxeOs {
-        /// Group name or ID
-        group: String,
         /// AxeOS update URL or file path
         axeos: String,
+        /// Filter by device type (can be specified multiple times)
+        #[arg(long = "device-type", value_name = "TYPE")]
+        device_types: Vec<String>,
+        /// Target specific IP addresses (can be specified multiple times)
+        #[arg(long = "ip-address", value_name = "IP")]
+        ip_addresses: Vec<String>,
+        /// Target all devices
+        #[arg(long)]
+        all: bool,
         /// Skip confirmation prompt
         #[arg(long)]
         force: bool,
@@ -427,15 +373,6 @@ impl Cli {
                     color: !self.no_color,
                     cache_dir: self.cache_dir.as_deref(),
                 })
-                .await
-            }
-            Commands::Group { action } => {
-                handlers::group(
-                    action,
-                    self.format,
-                    !self.no_color,
-                    self.cache_dir.as_deref(),
-                )
                 .await
             }
             Commands::Bulk { action } => {

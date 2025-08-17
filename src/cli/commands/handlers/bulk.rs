@@ -1,909 +1,604 @@
+use crate::api::{AxeOsClient, Device, DeviceStatus, SystemUpdateRequest};
+use crate::cache::DeviceCache;
 use crate::cli::commands::{BulkAction, OutputFormat};
-use anyhow::Result;
+use crate::output::{print_error, print_info, print_json, print_success, print_warning};
+use anyhow::{Context, Result};
+use futures::future::join_all;
+use std::io::{self, Write};
 use std::path::Path;
-use std::time::Duration;
-use tabled::Tabled;
-
-#[derive(Tabled)]
-struct BulkResultTableRow {
-    #[tabled(rename = "Device")]
-    device_name: String,
-    #[tabled(rename = "Status")]
-    status: String,
-    #[tabled(rename = "Message")]
-    message: String,
-}
 
 pub async fn bulk(
     action: BulkAction,
     format: OutputFormat,
     color: bool,
-    _cache_dir: Option<&Path>,
+    cache_dir: Option<&Path>,
 ) -> Result<()> {
-    use crate::api::{AxeOsClient, DeviceStatus, SystemUpdateRequest};
-    use crate::output::{
-        format_table, print_error, print_info, print_json, print_success, print_warning,
-    };
-    use crate::storage::GLOBAL_STORAGE;
-    use futures::future::join_all;
+    // Require cache directory for bulk operations
+    let cache_path = cache_dir
+        .context("Cache directory required for bulk operations. Use --cache-dir to specify.")?;
 
-    match action {
-        BulkAction::Restart { group, force } => {
-            // Find group
-            let group_info = match GLOBAL_STORAGE.find_group(&group) {
-                Ok(Some(g)) => g,
-                Ok(None) => {
-                    match format {
-                        OutputFormat::Json => {
-                            let output = serde_json::json!({
-                                "success": false,
-                                "error": format!("Group not found: {group}"),
-                                "timestamp": chrono::Utc::now()
-                            });
-                            print_json(&output, true)?;
-                        }
-                        OutputFormat::Text => {
-                            print_error(&format!("Group not found: {group}"), color);
-                        }
-                    }
-                    return Ok(());
-                }
-                Err(e) => {
-                    match format {
-                        OutputFormat::Json => {
-                            let output = serde_json::json!({
-                                "success": false,
-                                "error": e.to_string(),
-                                "timestamp": chrono::Utc::now()
-                            });
-                            print_json(&output, true)?;
-                        }
-                        OutputFormat::Text => {
-                            print_error(&format!("Failed to find group: {e}"), color);
-                        }
-                    }
-                    return Ok(());
-                }
-            };
+    // Load cache
+    let cache = DeviceCache::load(cache_path)?;
 
-            // Get online devices in group
-            let devices = match GLOBAL_STORAGE
-                .get_group_devices_by_status(&group_info.id, DeviceStatus::Online)
-            {
-                Ok(devices) => devices,
-                Err(e) => {
-                    match format {
-                        OutputFormat::Json => {
-                            let output = serde_json::json!({
-                                "success": false,
-                                "error": e.to_string(),
-                                "timestamp": chrono::Utc::now()
-                            });
-                            print_json(&output, true)?;
-                        }
-                        OutputFormat::Text => {
-                            print_error(&format!("Failed to get group devices: {e}"), color);
-                        }
-                    }
-                    return Ok(());
-                }
-            };
-
-            if devices.is_empty() {
-                match format {
-                    OutputFormat::Json => {
-                        let output = serde_json::json!({
-                            "success": false,
-                            "error": "No online devices found in group",
-                            "timestamp": chrono::Utc::now()
-                        });
-                        print_json(&output, true)?;
-                    }
-                    OutputFormat::Text => {
-                        print_warning("No online devices found in group", color);
-                    }
-                }
-                return Ok(());
+    if cache.is_empty() {
+        match format {
+            OutputFormat::Json => {
+                let output = serde_json::json!({
+                    "success": false,
+                    "error": "No devices in cache",
+                    "message": "Run 'axectl discover' first to find devices",
+                    "timestamp": chrono::Utc::now()
+                });
+                print_json(&output, true)?;
             }
-
-            // Confirmation prompt
-            if !force {
-                print_info(
-                    &format!(
-                        "Are you sure you want to restart {} devices in group '{}'? [y/N]: ",
-                        devices.len(),
-                        group_info.name
-                    ),
+            OutputFormat::Text => {
+                print_warning(
+                    "No devices in cache. Run 'axectl discover' first to find devices.",
                     color,
                 );
-                let mut input = String::new();
-                if std::io::stdin().read_line(&mut input).is_ok() {
-                    let input = input.trim().to_lowercase();
-                    if input != "y" && input != "yes" {
-                        print_info("Bulk restart cancelled", color);
-                        return Ok(());
-                    }
-                } else {
-                    print_error(
-                        "Failed to read input, use --force to skip confirmation",
-                        color,
-                    );
-                    return Ok(());
-                }
             }
+        }
+        return Ok(());
+    }
 
-            print_info(
-                &format!(
-                    "Restarting {} devices in group '{}'...",
-                    devices.len(),
-                    group_info.name
-                ),
-                color,
-            );
+    // Filter devices based on action parameters
+    let target_devices = match &action {
+        BulkAction::Restart {
+            device_types,
+            ip_addresses,
+            all,
+            ..
+        }
+        | BulkAction::SetFanSpeed {
+            device_types,
+            ip_addresses,
+            all,
+            ..
+        }
+        | BulkAction::UpdateSettings {
+            device_types,
+            ip_addresses,
+            all,
+            ..
+        }
+        | BulkAction::WifiScan {
+            device_types,
+            ip_addresses,
+            all,
+        }
+        | BulkAction::UpdateFirmware {
+            device_types,
+            ip_addresses,
+            all,
+            ..
+        }
+        | BulkAction::UpdateAxeOs {
+            device_types,
+            ip_addresses,
+            all,
+            ..
+        } => filter_devices(&cache, device_types, ip_addresses, *all)?,
+    };
 
-            // Execute restart operations in parallel
-            let restart_tasks: Vec<_> = devices
-                .iter()
-                .map(|device| {
-                    let device_clone = device.clone();
-                    async move {
-                        let client = AxeOsClient::with_timeout(
-                            &device_clone.ip_address,
-                            Duration::from_secs(10),
-                        );
-                        match client {
-                            Ok(client) => match client.restart_system().await {
-                                Ok(result) => {
-                                    (device_clone.name.clone(), result.success, result.message)
-                                }
-                                Err(e) => (device_clone.name.clone(), false, e.to_string()),
-                            },
-                            Err(e) => (
-                                device_clone.name.clone(),
-                                false,
-                                format!("Failed to create client: {e}"),
-                            ),
-                        }
-                    }
-                })
-                .collect();
-
-            let results = join_all(restart_tasks).await;
-
-            // Process results
-            let mut successful = 0;
-            let mut failed = 0;
-            let mut table_rows = Vec::new();
-
-            for (device_name, success, message) in results {
-                if success {
-                    successful += 1;
-                } else {
-                    failed += 1;
-                }
-
-                table_rows.push(BulkResultTableRow {
-                    device_name,
-                    status: if success {
-                        "✓ Success".to_string()
-                    } else {
-                        "✗ Failed".to_string()
-                    },
-                    message,
+    if target_devices.is_empty() {
+        match format {
+            OutputFormat::Json => {
+                let output = serde_json::json!({
+                    "success": false,
+                    "error": "No matching devices found",
+                    "message": "Check your filters and try again",
+                    "timestamp": chrono::Utc::now()
                 });
+                print_json(&output, true)?;
             }
+            OutputFormat::Text => {
+                print_warning(
+                    "No matching devices found with the specified filters.",
+                    color,
+                );
+            }
+        }
+        return Ok(());
+    }
 
-            match format {
-                OutputFormat::Json => {
-                    let output = serde_json::json!({
-                        "operation": "restart",
-                        "group": group_info.name,
-                        "total_devices": devices.len(),
-                        "successful": successful,
-                        "failed": failed,
-                        "results": table_rows.iter().map(|row| serde_json::json!({
-                            "device": row.device_name,
-                            "success": row.status.contains("Success"),
-                            "message": row.message
-                        })).collect::<Vec<_>>(),
-                        "timestamp": chrono::Utc::now()
-                    });
-                    print_json(&output, true)?;
-                }
-                OutputFormat::Text => {
-                    println!("{}", format_table(table_rows, color));
-                    println!();
-                    if failed == 0 {
-                        print_success(
-                            &format!(
-                                "Successfully restarted all {successful} devices",
-                                successful = successful
-                            ),
-                            color,
-                        );
-                    } else {
-                        print_warning(
-                            &format!(
-                                "Completed with {} successful, {} failed",
-                                successful, failed
-                            ),
-                            color,
-                        );
-                    }
-                }
+    // Get confirmation if not forced
+    let force = match &action {
+        BulkAction::Restart { force, .. }
+        | BulkAction::SetFanSpeed { force, .. }
+        | BulkAction::UpdateSettings { force, .. }
+        | BulkAction::UpdateFirmware { force, .. }
+        | BulkAction::UpdateAxeOs { force, .. } => *force,
+        BulkAction::WifiScan { .. } => true, // WifiScan doesn't need confirmation
+    };
+
+    if !force && format == OutputFormat::Text {
+        print_info(
+            &format!(
+                "About to perform action on {} device(s):",
+                target_devices.len()
+            ),
+            color,
+        );
+        for device in &target_devices {
+            eprintln!(
+                "  - {} ({:?}) at {}",
+                device.name, device.device_type, device.ip_address
+            );
+        }
+        eprintln!();
+
+        eprint!("Continue? [y/N]: ");
+        io::stdout().flush()?;
+
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+
+        if !input.trim().eq_ignore_ascii_case("y") {
+            print_info("Operation cancelled.", color);
+            return Ok(());
+        }
+    }
+
+    // Execute the action
+    match action {
+        BulkAction::Restart { .. } => execute_restart(&target_devices, format, color).await,
+        BulkAction::SetFanSpeed { speed, .. } => {
+            execute_set_fan_speed(&target_devices, speed, format, color).await
+        }
+        BulkAction::UpdateSettings { settings, .. } => {
+            execute_update_settings(&target_devices, &settings, format, color).await
+        }
+        BulkAction::WifiScan { .. } => execute_wifi_scan(&target_devices, format, color).await,
+        BulkAction::UpdateFirmware {
+            firmware, parallel, ..
+        } => execute_update_firmware(&target_devices, &firmware, parallel, format, color).await,
+        BulkAction::UpdateAxeOs {
+            axeos, parallel, ..
+        } => execute_update_axeos(&target_devices, &axeos, parallel, format, color).await,
+    }
+}
+
+/// Filter devices based on criteria
+fn filter_devices(
+    cache: &DeviceCache,
+    device_types: &[String],
+    ip_addresses: &[String],
+    all: bool,
+) -> Result<Vec<Device>> {
+    if all {
+        // Return all online devices
+        return Ok(cache.get_devices_by_status(DeviceStatus::Online));
+    }
+
+    let mut devices = Vec::new();
+
+    // Filter by device types
+    for device_type in device_types {
+        let type_devices = cache.get_online_devices_by_type_filter(device_type);
+        for device in type_devices {
+            if !devices
+                .iter()
+                .any(|d: &Device| d.ip_address == device.ip_address)
+            {
+                devices.push(device);
+            }
+        }
+    }
+
+    // Filter by IP addresses
+    for ip_address in ip_addresses {
+        if let Some(cached) = cache.get_device(ip_address) {
+            if cached.device.status == DeviceStatus::Online
+                && !devices
+                    .iter()
+                    .any(|d: &Device| d.ip_address == cached.device.ip_address)
+            {
+                devices.push(cached.device.clone());
+            }
+        }
+    }
+
+    Ok(devices)
+}
+
+/// Execute restart on all target devices
+async fn execute_restart(devices: &[Device], format: OutputFormat, color: bool) -> Result<()> {
+    if format == OutputFormat::Text {
+        print_info(&format!("Restarting {} device(s)...", devices.len()), color);
+    }
+
+    let mut results = Vec::new();
+
+    for device in devices {
+        let client = AxeOsClient::new(&device.ip_address)?;
+        let result = client.restart_system().await;
+
+        let success = result.is_ok();
+        let message = result.as_ref().err().map(|e| e.to_string());
+
+        if format == OutputFormat::Text {
+            if success {
+                print_success(&format!("✓ {} restarted", device.name), color);
+            } else {
+                print_error(
+                    &format!("✗ {} failed: {}", device.name, message.as_ref().unwrap()),
+                    color,
+                );
             }
         }
 
-        BulkAction::SetFanSpeed {
-            group,
-            speed,
-            force,
-        } => {
-            // Find group
-            let group_info = match GLOBAL_STORAGE.find_group(&group) {
-                Ok(Some(g)) => g,
-                Ok(None) => {
-                    match format {
-                        OutputFormat::Json => {
-                            let output = serde_json::json!({
-                                "success": false,
-                                "error": format!("Group not found: {group}"),
-                                "timestamp": chrono::Utc::now()
-                            });
-                            print_json(&output, true)?;
-                        }
-                        OutputFormat::Text => {
-                            print_error(&format!("Group not found: {group}"), color);
-                        }
-                    }
-                    return Ok(());
-                }
-                Err(e) => {
-                    match format {
-                        OutputFormat::Json => {
-                            let output = serde_json::json!({
-                                "success": false,
-                                "error": e.to_string(),
-                                "timestamp": chrono::Utc::now()
-                            });
-                            print_json(&output, true)?;
-                        }
-                        OutputFormat::Text => {
-                            print_error(&format!("Failed to find group: {e}"), color);
-                        }
-                    }
-                    return Ok(());
-                }
-            };
+        results.push(serde_json::json!({
+            "device": device.name,
+            "ip": device.ip_address,
+            "success": success,
+            "error": message
+        }));
+    }
 
-            // Get online devices in group
-            let devices = match GLOBAL_STORAGE
-                .get_group_devices_by_status(&group_info.id, DeviceStatus::Online)
-            {
-                Ok(devices) => devices,
-                Err(e) => {
-                    match format {
-                        OutputFormat::Json => {
-                            let output = serde_json::json!({
-                                "success": false,
-                                "error": e.to_string(),
-                                "timestamp": chrono::Utc::now()
-                            });
-                            print_json(&output, true)?;
-                        }
-                        OutputFormat::Text => {
-                            print_error(&format!("Failed to get group devices: {e}"), color);
-                        }
-                    }
-                    return Ok(());
-                }
-            };
+    if format == OutputFormat::Json {
+        let output = serde_json::json!({
+            "action": "restart",
+            "total_devices": devices.len(),
+            "results": results,
+            "timestamp": chrono::Utc::now()
+        });
+        print_json(&output, true)?;
+    }
 
-            if devices.is_empty() {
-                match format {
-                    OutputFormat::Json => {
-                        let output = serde_json::json!({
-                            "success": false,
-                            "error": "No online devices found in group",
-                            "timestamp": chrono::Utc::now()
-                        });
-                        print_json(&output, true)?;
-                    }
-                    OutputFormat::Text => {
-                        print_warning("No online devices found in group", color);
-                    }
-                }
-                return Ok(());
-            }
+    Ok(())
+}
 
-            // Confirmation prompt
-            if !force {
-                print_info(&format!("Are you sure you want to set fan speed to {speed}% on {count} devices in group '{name}'? [y/N]: ", 
-                    speed = speed, count = devices.len(), name = group_info.name), color);
-                let mut input = String::new();
-                if std::io::stdin().read_line(&mut input).is_ok() {
-                    let input = input.trim().to_lowercase();
-                    if input != "y" && input != "yes" {
-                        print_info("Bulk fan speed change cancelled", color);
-                        return Ok(());
-                    }
-                } else {
-                    print_error(
-                        "Failed to read input, use --force to skip confirmation",
-                        color,
-                    );
-                    return Ok(());
-                }
-            }
+/// Execute set fan speed on all target devices
+async fn execute_set_fan_speed(
+    devices: &[Device],
+    speed: u8,
+    format: OutputFormat,
+    color: bool,
+) -> Result<()> {
+    if format == OutputFormat::Text {
+        print_info(
+            &format!(
+                "Setting fan speed to {}% on {} device(s)...",
+                speed,
+                devices.len()
+            ),
+            color,
+        );
+    }
 
-            print_info(
-                &format!(
-                    "Setting fan speed to {}% on {} devices in group '{}'...",
-                    speed,
-                    devices.len(),
-                    group_info.name
-                ),
-                color,
-            );
+    let mut results = Vec::new();
 
-            // Execute fan speed operations in parallel
-            let fanspeed_tasks: Vec<_> = devices
-                .iter()
-                .map(|device| {
-                    let device_clone = device.clone();
-                    let speed_copy = speed;
-                    async move {
-                        let client = AxeOsClient::with_timeout(
-                            &device_clone.ip_address,
-                            Duration::from_secs(10),
-                        );
-                        match client {
-                            Ok(client) => match client.set_fan_speed(speed_copy).await {
-                                Ok(result) => {
-                                    (device_clone.name.clone(), result.success, result.message)
-                                }
-                                Err(e) => (device_clone.name.clone(), false, e.to_string()),
-                            },
-                            Err(e) => (
-                                device_clone.name.clone(),
-                                false,
-                                format!("Failed to create client: {e}"),
-                            ),
-                        }
-                    }
-                })
-                .collect();
+    for device in devices {
+        let client = AxeOsClient::new(&device.ip_address)?;
+        let result = client.set_fan_speed(speed).await;
 
-            let results = join_all(fanspeed_tasks).await;
+        let success = result.is_ok();
+        let message = result.as_ref().err().map(|e| e.to_string());
 
-            // Process results (same pattern as restart)
-            let mut successful = 0;
-            let mut failed = 0;
-            let mut table_rows = Vec::new();
-
-            for (device_name, success, message) in results {
-                if success {
-                    successful += 1;
-                } else {
-                    failed += 1;
-                }
-
-                table_rows.push(BulkResultTableRow {
-                    device_name,
-                    status: if success {
-                        "✓ Success".to_string()
-                    } else {
-                        "✗ Failed".to_string()
-                    },
-                    message,
-                });
-            }
-
-            match format {
-                OutputFormat::Json => {
-                    let output = serde_json::json!({
-                        "operation": "set_fan_speed",
-                        "group": group_info.name,
-                        "fan_speed": speed,
-                        "total_devices": devices.len(),
-                        "successful": successful,
-                        "failed": failed,
-                        "results": table_rows.iter().map(|row| serde_json::json!({
-                            "device": row.device_name,
-                            "success": row.status.contains("Success"),
-                            "message": row.message
-                        })).collect::<Vec<_>>(),
-                        "timestamp": chrono::Utc::now()
-                    });
-                    print_json(&output, true)?;
-                }
-                OutputFormat::Text => {
-                    println!("{}", format_table(table_rows, color));
-                    println!();
-                    if failed == 0 {
-                        print_success(
-                            &format!(
-                                "Successfully set fan speed on all {successful} devices",
-                                successful = successful
-                            ),
-                            color,
-                        );
-                    } else {
-                        print_warning(
-                            &format!(
-                                "Completed with {} successful, {} failed",
-                                successful, failed
-                            ),
-                            color,
-                        );
-                    }
-                }
+        if format == OutputFormat::Text {
+            if success {
+                print_success(
+                    &format!("✓ {} fan speed set to {}%", device.name, speed),
+                    color,
+                );
+            } else {
+                print_error(
+                    &format!("✗ {} failed: {}", device.name, message.as_ref().unwrap()),
+                    color,
+                );
             }
         }
 
-        BulkAction::UpdateSettings {
-            group,
-            settings,
-            force,
-        } => {
-            // Parse settings first to validate JSON
-            let update_request = match serde_json::from_str::<SystemUpdateRequest>(&settings) {
-                Ok(req) => req,
-                Err(e) => {
-                    match format {
-                        OutputFormat::Json => {
-                            let output = serde_json::json!({
-                                "success": false,
-                                "error": format!("Invalid settings JSON: {e}"),
-                                "timestamp": chrono::Utc::now()
-                            });
-                            print_json(&output, true)?;
-                        }
-                        OutputFormat::Text => {
-                            print_error(&format!("Invalid settings JSON: {e}"), color);
-                        }
-                    }
-                    return Ok(());
-                }
-            };
+        results.push(serde_json::json!({
+            "device": device.name,
+            "ip": device.ip_address,
+            "success": success,
+            "error": message
+        }));
+    }
 
-            // Find group and get devices (same pattern as above)
-            let group_info = match GLOBAL_STORAGE.find_group(&group) {
-                Ok(Some(g)) => g,
-                Ok(None) => {
-                    match format {
-                        OutputFormat::Json => {
-                            let output = serde_json::json!({
-                                "success": false,
-                                "error": format!("Group not found: {group}"),
-                                "timestamp": chrono::Utc::now()
-                            });
-                            print_json(&output, true)?;
-                        }
-                        OutputFormat::Text => {
-                            print_error(&format!("Group not found: {group}"), color);
-                        }
-                    }
-                    return Ok(());
-                }
-                Err(e) => {
-                    match format {
-                        OutputFormat::Json => {
-                            let output = serde_json::json!({
-                                "success": false,
-                                "error": e.to_string(),
-                                "timestamp": chrono::Utc::now()
-                            });
-                            print_json(&output, true)?;
-                        }
-                        OutputFormat::Text => {
-                            print_error(&format!("Failed to find group: {e}"), color);
-                        }
-                    }
-                    return Ok(());
-                }
-            };
+    if format == OutputFormat::Json {
+        let output = serde_json::json!({
+            "action": "set_fan_speed",
+            "speed": speed,
+            "total_devices": devices.len(),
+            "results": results,
+            "timestamp": chrono::Utc::now()
+        });
+        print_json(&output, true)?;
+    }
 
-            let devices = match GLOBAL_STORAGE
-                .get_group_devices_by_status(&group_info.id, DeviceStatus::Online)
-            {
-                Ok(devices) => devices,
-                Err(e) => {
-                    match format {
-                        OutputFormat::Json => {
-                            let output = serde_json::json!({
-                                "success": false,
-                                "error": e.to_string(),
-                                "timestamp": chrono::Utc::now()
-                            });
-                            print_json(&output, true)?;
-                        }
-                        OutputFormat::Text => {
-                            print_error(&format!("Failed to get group devices: {e}"), color);
-                        }
-                    }
-                    return Ok(());
-                }
-            };
+    Ok(())
+}
 
-            if devices.is_empty() {
-                match format {
-                    OutputFormat::Json => {
-                        let output = serde_json::json!({
-                            "success": false,
-                            "error": "No online devices found in group",
-                            "timestamp": chrono::Utc::now()
-                        });
-                        print_json(&output, true)?;
-                    }
-                    OutputFormat::Text => {
-                        print_warning("No online devices found in group", color);
-                    }
-                }
-                return Ok(());
-            }
+/// Execute update settings on all target devices
+async fn execute_update_settings(
+    devices: &[Device],
+    settings: &str,
+    format: OutputFormat,
+    color: bool,
+) -> Result<()> {
+    // Parse settings JSON
+    let settings_json: serde_json::Value =
+        serde_json::from_str(settings).context("Failed to parse settings JSON")?;
 
-            // Confirmation prompt
-            if !force {
-                print_info(&format!("Are you sure you want to update settings on {count} devices in group '{name}'? [y/N]: ", 
-                    count = devices.len(), name = group_info.name), color);
-                let mut input = String::new();
-                if std::io::stdin().read_line(&mut input).is_ok() {
-                    let input = input.trim().to_lowercase();
-                    if input != "y" && input != "yes" {
-                        print_info("Bulk settings update cancelled", color);
-                        return Ok(());
-                    }
-                } else {
-                    print_error(
-                        "Failed to read input, use --force to skip confirmation",
-                        color,
-                    );
-                    return Ok(());
-                }
-            }
+    if format == OutputFormat::Text {
+        print_info(
+            &format!("Updating settings on {} device(s)...", devices.len()),
+            color,
+        );
+    }
 
-            print_info(
-                &format!(
-                    "Updating settings on {} devices in group '{}'...",
-                    devices.len(),
-                    group_info.name
-                ),
-                color,
-            );
+    let mut results = Vec::new();
 
-            // Execute update operations in parallel
-            let update_tasks: Vec<_> = devices
-                .iter()
-                .map(|device| {
-                    let device_clone = device.clone();
-                    let update_req_clone = update_request.clone();
-                    async move {
-                        let client = AxeOsClient::with_timeout(
-                            &device_clone.ip_address,
-                            Duration::from_secs(10),
-                        );
-                        match client {
-                            Ok(client) => match client.update_system(update_req_clone).await {
-                                Ok(result) => {
-                                    (device_clone.name.clone(), result.success, result.message)
-                                }
-                                Err(e) => (device_clone.name.clone(), false, e.to_string()),
-                            },
-                            Err(e) => (
-                                device_clone.name.clone(),
-                                false,
-                                format!("Failed to create client: {e}"),
-                            ),
-                        }
-                    }
-                })
-                .collect();
+    for device in devices {
+        let client = AxeOsClient::new(&device.ip_address)?;
+        // Parse settings into SystemUpdateRequest
+        let update_request: SystemUpdateRequest = serde_json::from_value(settings_json.clone())
+            .context("Failed to parse settings into SystemUpdateRequest")?;
+        let result = client.update_system(update_request).await;
 
-            let results = join_all(update_tasks).await;
+        let success = result.is_ok();
+        let message = result.as_ref().err().map(|e| e.to_string());
 
-            // Process results (same pattern)
-            let mut successful = 0;
-            let mut failed = 0;
-            let mut table_rows = Vec::new();
-
-            for (device_name, success, message) in results {
-                if success {
-                    successful += 1;
-                } else {
-                    failed += 1;
-                }
-
-                table_rows.push(BulkResultTableRow {
-                    device_name,
-                    status: if success {
-                        "✓ Success".to_string()
-                    } else {
-                        "✗ Failed".to_string()
-                    },
-                    message,
-                });
-            }
-
-            match format {
-                OutputFormat::Json => {
-                    let output = serde_json::json!({
-                        "operation": "update_settings",
-                        "group": group_info.name,
-                        "total_devices": devices.len(),
-                        "successful": successful,
-                        "failed": failed,
-                        "results": table_rows.iter().map(|row| serde_json::json!({
-                            "device": row.device_name,
-                            "success": row.status.contains("Success"),
-                            "message": row.message
-                        })).collect::<Vec<_>>(),
-                        "timestamp": chrono::Utc::now()
-                    });
-                    print_json(&output, true)?;
-                }
-                OutputFormat::Text => {
-                    println!("{}", format_table(table_rows, color));
-                    println!();
-                    if failed == 0 {
-                        print_success(
-                            &format!(
-                                "Successfully updated settings on all {} devices",
-                                successful
-                            ),
-                            color,
-                        );
-                    } else {
-                        print_warning(
-                            &format!(
-                                "Completed with {} successful, {} failed",
-                                successful, failed
-                            ),
-                            color,
-                        );
-                    }
-                }
+        if format == OutputFormat::Text {
+            if success {
+                print_success(&format!("✓ {} settings updated", device.name), color);
+            } else {
+                print_error(
+                    &format!("✗ {} failed: {}", device.name, message.as_ref().unwrap()),
+                    color,
+                );
             }
         }
 
-        BulkAction::WifiScan { group } => {
-            // Find group and get devices
-            let group_info = match GLOBAL_STORAGE.find_group(&group) {
-                Ok(Some(g)) => g,
-                Ok(None) => {
-                    match format {
-                        OutputFormat::Json => {
-                            let output = serde_json::json!({
-                                "success": false,
-                                "error": format!("Group not found: {group}"),
-                                "timestamp": chrono::Utc::now()
-                            });
-                            print_json(&output, true)?;
-                        }
-                        OutputFormat::Text => {
-                            print_error(&format!("Group not found: {group}"), color);
-                        }
-                    }
-                    return Ok(());
-                }
-                Err(e) => {
-                    match format {
-                        OutputFormat::Json => {
-                            let output = serde_json::json!({
-                                "success": false,
-                                "error": e.to_string(),
-                                "timestamp": chrono::Utc::now()
-                            });
-                            print_json(&output, true)?;
-                        }
-                        OutputFormat::Text => {
-                            print_error(&format!("Failed to find group: {e}"), color);
-                        }
-                    }
-                    return Ok(());
-                }
-            };
+        results.push(serde_json::json!({
+            "device": device.name,
+            "ip": device.ip_address,
+            "success": success,
+            "error": message
+        }));
+    }
 
-            let devices = match GLOBAL_STORAGE
-                .get_group_devices_by_status(&group_info.id, DeviceStatus::Online)
-            {
-                Ok(devices) => devices,
-                Err(e) => {
-                    match format {
-                        OutputFormat::Json => {
-                            let output = serde_json::json!({
-                                "success": false,
-                                "error": e.to_string(),
-                                "timestamp": chrono::Utc::now()
-                            });
-                            print_json(&output, true)?;
-                        }
-                        OutputFormat::Text => {
-                            print_error(&format!("Failed to get group devices: {e}"), color);
-                        }
-                    }
-                    return Ok(());
-                }
-            };
+    if format == OutputFormat::Json {
+        let output = serde_json::json!({
+            "action": "update_settings",
+            "settings": settings_json,
+            "total_devices": devices.len(),
+            "results": results,
+            "timestamp": chrono::Utc::now()
+        });
+        print_json(&output, true)?;
+    }
 
-            if devices.is_empty() {
-                match format {
-                    OutputFormat::Json => {
-                        let output = serde_json::json!({
-                            "success": false,
-                            "error": "No online devices found in group",
-                            "timestamp": chrono::Utc::now()
-                        });
-                        print_json(&output, true)?;
-                    }
-                    OutputFormat::Text => {
-                        print_warning("No online devices found in group", color);
-                    }
-                }
-                return Ok(());
-            }
+    Ok(())
+}
 
-            print_info(
-                &format!(
-                    "Scanning WiFi on {} devices in group '{}'...",
-                    devices.len(),
-                    group_info.name
-                ),
-                color,
-            );
+/// Execute WiFi scan on all target devices
+async fn execute_wifi_scan(devices: &[Device], format: OutputFormat, color: bool) -> Result<()> {
+    if format == OutputFormat::Text {
+        print_info(
+            &format!("Scanning WiFi on {} device(s)...", devices.len()),
+            color,
+        );
+    }
 
-            // Execute WiFi scan operations in parallel
-            let scan_tasks: Vec<_> = devices
-                .iter()
-                .map(|device| {
-                    let device_clone = device.clone();
-                    async move {
-                        let client = AxeOsClient::with_timeout(
-                            &device_clone.ip_address,
-                            Duration::from_secs(10),
-                        );
-                        match client {
-                            Ok(client) => match client.scan_wifi().await {
-                                Ok(scan_result) => (
-                                    device_clone.name.clone(),
-                                    true,
-                                    format!(
-                                        "Found {count} networks",
-                                        count = scan_result.networks.len()
-                                    ),
-                                    Some(scan_result),
-                                ),
-                                Err(e) => (device_clone.name.clone(), false, e.to_string(), None),
+    let mut results = Vec::new();
+
+    for device in devices {
+        let client = AxeOsClient::new(&device.ip_address)?;
+        let result = client.scan_wifi().await;
+
+        match result {
+            Ok(scan_response) => {
+                if format == OutputFormat::Text {
+                    print_success(
+                        &format!(
+                            "✓ {} found {} networks",
+                            device.name,
+                            scan_response.networks.len()
+                        ),
+                        color,
+                    );
+                    for network in &scan_response.networks {
+                        eprintln!(
+                            "    - {} ({}dBm)",
+                            if network.ssid.is_empty() {
+                                "<hidden>"
+                            } else {
+                                &network.ssid
                             },
-                            Err(e) => (
-                                device_clone.name.clone(),
-                                false,
-                                format!("Failed to create client: {e}"),
-                                None,
-                            ),
-                        }
+                            network.rssi
+                        );
                     }
-                })
-                .collect();
-
-            let results = join_all(scan_tasks).await;
-
-            // Process WiFi scan results
-            let mut successful = 0;
-            let mut failed = 0;
-            let mut all_scan_results = Vec::new();
-
-            for (device_name, success, message, scan_data) in results {
-                if success {
-                    successful += 1;
-                } else {
-                    failed += 1;
                 }
 
-                all_scan_results.push(serde_json::json!({
-                    "device": device_name,
-                    "success": success,
-                    "message": message,
-                    "wifi_networks": scan_data
+                results.push(serde_json::json!({
+                    "device": device.name,
+                    "ip": device.ip_address,
+                    "success": true,
+                    "networks": scan_response.networks
                 }));
             }
-
-            match format {
-                OutputFormat::Json => {
-                    let output = serde_json::json!({
-                        "operation": "wifi_scan",
-                        "group": group_info.name,
-                        "total_devices": devices.len(),
-                        "successful": successful,
-                        "failed": failed,
-                        "results": all_scan_results,
-                        "timestamp": chrono::Utc::now()
-                    });
-                    print_json(&output, true)?;
+            Err(e) => {
+                if format == OutputFormat::Text {
+                    print_error(&format!("✗ {} failed: {}", device.name, e), color);
                 }
-                OutputFormat::Text => {
-                    for result in &all_scan_results {
-                        let device = result["device"].as_str().unwrap_or("Unknown");
-                        let success = result["success"].as_bool().unwrap_or(false);
-                        let message = result["message"].as_str().unwrap_or("");
 
-                        if success {
-                            println!("✓ {device}: {message}", device = device, message = message);
-                            if let Some(networks) = result["wifi_networks"]["networks"].as_array() {
-                                for network in networks {
-                                    if let (Some(ssid), Some(rssi)) =
-                                        (network["ssid"].as_str(), network["rssi"].as_i64())
-                                    {
-                                        println!(
-                                            "    {ssid} ({rssi}dBm)",
-                                            ssid = ssid,
-                                            rssi = rssi
-                                        );
-                                    }
-                                }
-                                println!();
-                            }
-                        } else {
-                            println!("✗ {device}: {message}", device = device, message = message);
-                        }
-                    }
-
-                    if failed == 0 {
-                        print_success(
-                            &format!(
-                                "Successfully scanned WiFi on all {successful} devices",
-                                successful = successful
-                            ),
-                            color,
-                        );
-                    } else {
-                        print_warning(
-                            &format!(
-                                "Completed with {} successful, {} failed",
-                                successful, failed
-                            ),
-                            color,
-                        );
-                    }
-                }
+                results.push(serde_json::json!({
+                    "device": device.name,
+                    "ip": device.ip_address,
+                    "success": false,
+                    "error": e.to_string()
+                }));
             }
         }
+    }
 
-        BulkAction::UpdateFirmware {
-            group: _,
-            firmware: _,
-            force: _,
-            parallel,
-        } => {
-            // Similar to other operations but with parallel control
-            print_info(
-                &format!(
-                    "Firmware update operations would run with {} parallel connections",
-                    parallel
-                ),
-                color,
-            );
-            print_info("Firmware update implementation would go here", color);
-            // Implementation would be similar to other bulk operations but with semaphore for parallel control
+    if format == OutputFormat::Json {
+        let output = serde_json::json!({
+            "action": "wifi_scan",
+            "total_devices": devices.len(),
+            "results": results,
+            "timestamp": chrono::Utc::now()
+        });
+        print_json(&output, true)?;
+    }
+
+    Ok(())
+}
+
+/// Execute firmware update on all target devices
+async fn execute_update_firmware(
+    devices: &[Device],
+    firmware: &str,
+    parallel: usize,
+    format: OutputFormat,
+    color: bool,
+) -> Result<()> {
+    if format == OutputFormat::Text {
+        print_info(
+            &format!(
+                "Updating firmware on {} device(s) (max {} parallel)...",
+                devices.len(),
+                parallel
+            ),
+            color,
+        );
+    }
+
+    let mut results = Vec::new();
+
+    // Process in batches for parallel updates
+    for batch in devices.chunks(parallel) {
+        let mut batch_futures = Vec::new();
+
+        for device in batch {
+            let client = AxeOsClient::new(&device.ip_address)?;
+            let fw = firmware.to_string();
+            let name = device.name.clone();
+            let ip = device.ip_address.clone();
+
+            batch_futures.push(async move {
+                let result = client.update_firmware(&fw).await;
+                (name, ip, result)
+            });
         }
 
-        BulkAction::UpdateAxeOs {
-            group: _,
-            axeos: _,
-            force: _,
-            parallel,
-        } => {
-            // Similar to firmware update
-            print_info(
-                &format!(
-                    "AxeOS update operations would run with {} parallel connections",
-                    parallel
-                ),
-                color,
-            );
-            print_info("AxeOS update implementation would go here", color);
-            // Implementation would be similar to other bulk operations but with semaphore for parallel control
+        let batch_results = join_all(batch_futures).await;
+
+        for (name, ip, result) in batch_results {
+            let success = result.is_ok();
+            let message = result.as_ref().err().map(|e| e.to_string());
+
+            if format == OutputFormat::Text {
+                if success {
+                    print_success(&format!("✓ {} firmware update started", name), color);
+                } else {
+                    print_error(
+                        &format!("✗ {} failed: {}", name, message.as_ref().unwrap()),
+                        color,
+                    );
+                }
+            }
+
+            results.push(serde_json::json!({
+                "device": name,
+                "ip": ip,
+                "success": success,
+                "error": message
+            }));
         }
+    }
+
+    if format == OutputFormat::Json {
+        let output = serde_json::json!({
+            "action": "update_firmware",
+            "firmware": firmware,
+            "total_devices": devices.len(),
+            "parallel": parallel,
+            "results": results,
+            "timestamp": chrono::Utc::now()
+        });
+        print_json(&output, true)?;
+    }
+
+    Ok(())
+}
+
+/// Execute AxeOS update on all target devices
+async fn execute_update_axeos(
+    devices: &[Device],
+    axeos: &str,
+    parallel: usize,
+    format: OutputFormat,
+    color: bool,
+) -> Result<()> {
+    if format == OutputFormat::Text {
+        print_info(
+            &format!(
+                "Updating AxeOS on {} device(s) (max {} parallel)...",
+                devices.len(),
+                parallel
+            ),
+            color,
+        );
+    }
+
+    let mut results = Vec::new();
+
+    // Process in batches for parallel updates
+    for batch in devices.chunks(parallel) {
+        let mut batch_futures = Vec::new();
+
+        for device in batch {
+            let client = AxeOsClient::new(&device.ip_address)?;
+            let axe = axeos.to_string();
+            let name = device.name.clone();
+            let ip = device.ip_address.clone();
+
+            batch_futures.push(async move {
+                let result = client.update_axeos(&axe).await;
+                (name, ip, result)
+            });
+        }
+
+        let batch_results = join_all(batch_futures).await;
+
+        for (name, ip, result) in batch_results {
+            let success = result.is_ok();
+            let message = result.as_ref().err().map(|e| e.to_string());
+
+            if format == OutputFormat::Text {
+                if success {
+                    print_success(&format!("✓ {} AxeOS update started", name), color);
+                } else {
+                    print_error(
+                        &format!("✗ {} failed: {}", name, message.as_ref().unwrap()),
+                        color,
+                    );
+                }
+            }
+
+            results.push(serde_json::json!({
+                "device": name,
+                "ip": ip,
+                "success": success,
+                "error": message
+            }));
+        }
+    }
+
+    if format == OutputFormat::Json {
+        let output = serde_json::json!({
+            "action": "update_axeos",
+            "axeos": axeos,
+            "total_devices": devices.len(),
+            "parallel": parallel,
+            "results": results,
+            "timestamp": chrono::Utc::now()
+        });
+        print_json(&output, true)?;
     }
 
     Ok(())

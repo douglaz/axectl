@@ -5,7 +5,7 @@ use std::net::IpAddr;
 use std::time::Duration;
 use tokio::time::timeout;
 
-use crate::api::{AxeOsClient, DeviceInfo, DeviceStatus, DeviceType};
+use crate::api::{AxeOsClient, Device, DeviceStatus, DeviceType};
 
 #[derive(Debug, Clone)]
 pub struct MdnsDiscovery {
@@ -57,7 +57,7 @@ impl MdnsDiscovery {
     }
 
     /// Discover devices using mDNS
-    pub async fn discover_devices(&self) -> Result<Vec<DeviceInfo>> {
+    pub async fn discover_devices(&self) -> Result<Vec<Device>> {
         let mdns_devices = self.scan_mdns_services().await?;
         let mut devices = Vec::new();
 
@@ -155,7 +155,7 @@ impl MdnsDiscovery {
         &self,
         ip: &IpAddr,
         mdns_device: &MdnsDevice,
-    ) -> Result<Option<DeviceInfo>> {
+    ) -> Result<Option<Device>> {
         let ip_str = ip.to_string();
 
         // Check if this looks like it could be an AxeOS device
@@ -175,7 +175,7 @@ impl MdnsDiscovery {
                 {
                     let device_type = DeviceType::from(&system_info);
 
-                    let device = DeviceInfo {
+                    let device = Device {
                         name: system_info.hostname,
                         ip_address: ip_str,
                         device_type,
@@ -183,13 +183,14 @@ impl MdnsDiscovery {
                         status: DeviceStatus::Online,
                         discovered_at: chrono::Utc::now(),
                         last_seen: chrono::Utc::now(),
+                        stats: None,
                     };
 
                     Ok(Some(device))
                 } else {
                     // Health check passed but couldn't get system info
                     // Still might be an AxeOS device
-                    let device = DeviceInfo {
+                    let device = Device {
                         name: mdns_device.hostname.clone(),
                         ip_address: ip_str,
                         device_type: DeviceType::Unknown,
@@ -197,6 +198,7 @@ impl MdnsDiscovery {
                         status: DeviceStatus::Online,
                         discovered_at: chrono::Utc::now(),
                         last_seen: chrono::Utc::now(),
+                        stats: None,
                     };
 
                     Ok(Some(device))
@@ -254,7 +256,7 @@ impl MdnsDiscovery {
 }
 
 /// Simple mDNS discovery function for quick use
-pub async fn discover_axeos_devices(timeout: Duration) -> Result<Vec<DeviceInfo>> {
+pub async fn discover_axeos_devices(timeout: Duration) -> Result<Vec<Device>> {
     let discovery = MdnsDiscovery::with_timeout(timeout);
     discovery.discover_devices().await
 }
@@ -263,7 +265,7 @@ pub async fn discover_axeos_devices(timeout: Duration) -> Result<Vec<DeviceInfo>
 pub async fn discover_with_services(
     services: Vec<String>,
     timeout: Duration,
-) -> Result<Vec<DeviceInfo>> {
+) -> Result<Vec<Device>> {
     let mut discovery = MdnsDiscovery::with_service_names(services);
     discovery.discovery_timeout = timeout;
     discovery.discover_devices().await
