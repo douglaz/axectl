@@ -350,10 +350,7 @@ mod tests {
         let services = vec!["_test._tcp.local.".to_string()];
         let result = discover_with_services(services, Duration::from_millis(100)).await;
         assert!(result.is_ok());
-
-        let _devices = result.unwrap();
         // Should complete without error, even if no devices found
-        // Length is always >= 0, so we just verify it completed successfully
     }
 
     #[test]

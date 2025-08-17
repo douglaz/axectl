@@ -64,9 +64,6 @@ pub async fn monitor(config: MonitorConfig<'_>) -> Result<()> {
         );
     }
 
-    // Initialize database if provided
-    let _db_manager: Option<()> = None; // Database functionality temporarily disabled
-
     loop {
         // Get devices from cache based on filter
         let devices = if let Some(ref type_name) = config.type_filter {
@@ -135,8 +132,6 @@ pub async fn monitor(config: MonitorConfig<'_>) -> Result<()> {
 
                     // Update stats in cache
                     cache.update_device_stats(&device.ip_address, stats.clone());
-
-                    // Database recording temporarily disabled
 
                     device_stats.push(Some(stats));
                 }
