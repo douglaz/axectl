@@ -15,6 +15,10 @@ pub struct ListArgs<'a> {
     pub network: Option<String>,
     pub timeout: u64,
     pub no_mdns: bool,
+    pub device_type: Option<String>,
+    pub temp_alert: Option<f64>,
+    pub hashrate_alert: Option<f64>,
+    pub type_summary: bool,
     pub format: OutputFormat,
     pub color: bool,
     pub cache_dir: Option<&'a Path>,
@@ -66,6 +70,11 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
         print_json, print_success, print_warning, ColoredTemperature,
     };
     use crate::storage::GLOBAL_STORAGE;
+    use std::collections::HashMap;
+
+    // Track previous hashrates for drop detection
+    let mut previous_hashrates: HashMap<String, f64> = HashMap::new();
+    let mut alert_count = 0;
 
     // Require cache_dir for list command
     let cache_path = match args.cache_dir {
@@ -128,7 +137,14 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
         match DeviceCache::load(cache_path) {
             Ok(cache) => {
                 if !cache.is_empty() {
-                    devices = if args.all {
+                    // Apply type filtering if specified
+                    devices = if let Some(ref type_filter) = args.device_type {
+                        if args.all {
+                            cache.get_devices_by_type_filter(type_filter)
+                        } else {
+                            cache.get_online_devices_by_type_filter(type_filter)
+                        }
+                    } else if args.all {
                         cache.get_all_devices()
                     } else {
                         cache.get_devices_by_status(DeviceStatus::Online)
@@ -150,7 +166,13 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
             Err(e) => {
                 tracing::warn!("Failed to load cache: {}", e);
                 // Try memory storage as fallback
-                devices = if args.all {
+                devices = if let Some(ref type_filter) = args.device_type {
+                    if args.all {
+                        GLOBAL_STORAGE.get_devices_by_type_filter(type_filter)?
+                    } else {
+                        GLOBAL_STORAGE.get_online_devices_by_type_filter(type_filter)?
+                    }
+                } else if args.all {
                     GLOBAL_STORAGE.get_all_devices()?
                 } else {
                     GLOBAL_STORAGE.get_devices_by_status(DeviceStatus::Online)?
@@ -190,11 +212,49 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
 
         // Collect stats if not in no-stats mode
         let mut device_stats = Vec::new();
+        let mut alerts = Vec::new();
+
         if !args.no_stats {
             for device in &devices {
                 if device.status == DeviceStatus::Online {
                     match collect_device_stats(device).await {
                         Ok(stats) => {
+                            // Check for alerts if in watch mode
+                            if args.watch {
+                                // Temperature alert
+                                if let Some(temp_threshold) = args.temp_alert {
+                                    if stats.temperature_celsius > temp_threshold {
+                                        alerts.push(format!(
+                                            "🌡️ {} temperature alert: {:.1}°C > {:.1}°C",
+                                            device.name, stats.temperature_celsius, temp_threshold
+                                        ));
+                                    }
+                                }
+
+                                // Hashrate drop alert
+                                if let Some(hashrate_threshold) = args.hashrate_alert {
+                                    if let Some(previous_hashrate) =
+                                        previous_hashrates.get(&device.ip_address)
+                                    {
+                                        let drop_percent = ((previous_hashrate
+                                            - stats.hashrate_mhs)
+                                            / previous_hashrate)
+                                            * 100.0;
+                                        if drop_percent > hashrate_threshold {
+                                            alerts.push(format!(
+                                                "📉 {} hashrate drop: {:.1}% ({} -> {})",
+                                                device.name,
+                                                drop_percent,
+                                                format_hashrate(*previous_hashrate),
+                                                format_hashrate(stats.hashrate_mhs)
+                                            ));
+                                        }
+                                    }
+                                    previous_hashrates
+                                        .insert(device.ip_address.clone(), stats.hashrate_mhs);
+                                }
+                            }
+
                             // Store stats in global storage
                             if let Err(e) = GLOBAL_STORAGE.store_stats(stats.clone()) {
                                 tracing::warn!("Failed to store stats: {}", e);
@@ -211,6 +271,11 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
                             let _ = GLOBAL_STORAGE
                                 .update_device_status(&device.ip_address, DeviceStatus::Offline);
                             device_stats.push(None);
+
+                            // Add offline alert if in watch mode
+                            if args.watch {
+                                alerts.push(format!("🔌 {} went offline", device.name));
+                            }
                         }
                     }
                 } else {
@@ -219,16 +284,25 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
             }
         }
 
+        // Update alert count
+        alert_count += alerts.len();
+
         // Output results
         match args.format {
             OutputFormat::Json => {
                 if args.no_stats {
-                    let output = serde_json::json!({
+                    let mut output = serde_json::json!({
                         "devices": devices,
                         "total": devices.len(),
                         "filter": if args.all { "all" } else { "online_only" },
                         "timestamp": chrono::Utc::now()
                     });
+
+                    // Add type filter info if specified
+                    if let Some(ref type_filter) = args.device_type {
+                        output["type_filter"] = serde_json::json!(type_filter);
+                    }
+
                     print_json(&output, true)?;
                 } else {
                     let devices_with_stats: Vec<serde_json::Value> = devices
@@ -244,13 +318,31 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
                         .collect();
 
                     let swarm_summary = GLOBAL_STORAGE.get_swarm_summary()?;
-                    let output = serde_json::json!({
+                    let mut output = serde_json::json!({
                         "devices": devices_with_stats,
                         "total": devices.len(),
                         "filter": if args.all { "all" } else { "online_only" },
                         "summary": swarm_summary,
                         "timestamp": chrono::Utc::now()
                     });
+
+                    // Add type filter info if specified
+                    if let Some(ref type_filter) = args.device_type {
+                        output["type_filter"] = serde_json::json!(type_filter);
+                    }
+
+                    // Add alerts if in watch mode
+                    if args.watch && !alerts.is_empty() {
+                        output["alerts"] = serde_json::json!(alerts);
+                        output["alert_count"] = serde_json::json!(alert_count);
+                    }
+
+                    // Add type summaries if requested
+                    if args.type_summary {
+                        let type_summaries = GLOBAL_STORAGE.get_all_type_summaries()?;
+                        output["type_summaries"] = serde_json::to_value(type_summaries)?;
+                    }
+
                     print_json(&output, true)?;
                 }
             }
@@ -353,11 +445,59 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
                     }
                 }
 
+                // Show alerts if any
+                if !alerts.is_empty() {
+                    println!();
+                    println!("🚨 ALERTS:");
+                    for alert in &alerts {
+                        print_warning(alert, args.color);
+                    }
+                }
+
+                // Show type summaries if requested
+                if args.type_summary {
+                    println!();
+                    println!("📊 Device Type Summaries:");
+                    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+                    if let Ok(type_summaries) = GLOBAL_STORAGE.get_all_type_summaries() {
+                        if type_summaries.is_empty() {
+                            println!("   No devices found");
+                        } else {
+                            for summary in type_summaries {
+                                let status_indicator = if summary.devices_online > 0 {
+                                    "🟢"
+                                } else {
+                                    "🔴"
+                                };
+
+                                println!(
+                                    "{} {} ({}/{} online) | {} | {:.1}W | Avg: {:.1}°C",
+                                    status_indicator,
+                                    summary.type_name,
+                                    summary.devices_online,
+                                    summary.total_devices,
+                                    format_hashrate(summary.total_hashrate_mhs),
+                                    summary.total_power_watts,
+                                    summary.average_temperature
+                                );
+                            }
+                        }
+                    } else {
+                        println!("   Failed to retrieve type summaries");
+                    }
+                }
+
                 print_info(
                     &format!(
-                        "Total: {} device(s) {}",
+                        "Total: {} device(s) {}{}",
                         devices.len(),
-                        if args.all { "" } else { "(online only)" }
+                        if args.all { "" } else { "(online only)" },
+                        if alert_count > 0 {
+                            format!(" | {} total alerts this session", alert_count)
+                        } else {
+                            String::new()
+                        }
                     ),
                     args.color,
                 );

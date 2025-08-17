@@ -83,6 +83,22 @@ pub enum Commands {
         /// Skip mDNS discovery (only with --discover)
         #[arg(long)]
         no_mdns: bool,
+
+        /// Filter devices by type (e.g., bitaxe, nerdqaxe, bitaxe-ultra)
+        #[arg(long, value_name = "TYPE")]
+        device_type: Option<String>,
+
+        /// Alert on high temperature (celsius, only with --watch)
+        #[arg(long)]
+        temp_alert: Option<f64>,
+
+        /// Alert on hashrate drop (percentage, only with --watch)
+        #[arg(long)]
+        hashrate_alert: Option<f64>,
+
+        /// Show per-type summaries
+        #[arg(long)]
+        type_summary: bool,
     },
 
     /// Control a device
@@ -358,6 +374,10 @@ impl Cli {
                 network,
                 timeout,
                 no_mdns,
+                device_type,
+                temp_alert,
+                hashrate_alert,
+                type_summary,
             } => {
                 let args = handlers::ListArgs {
                     all,
@@ -368,6 +388,10 @@ impl Cli {
                     network,
                     timeout,
                     no_mdns,
+                    device_type,
+                    temp_alert,
+                    hashrate_alert,
+                    type_summary,
                     format: self.format,
                     color: !self.no_color,
                     cache_dir: self.cache_dir.as_deref(),
