@@ -16,13 +16,13 @@ futures = "0.3"
 
 # CLI
 clap = { version = "4", features = ["derive"] }
-tabled = "0.15"
-colored = "2"
+tabled = "0.20"
+colored = "3"
 
 # Network
 reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
-mdns-sd = "0.11"
-ipnetwork = "0.20"
+mdns-sd = "0.14"
+ipnetwork = "0.21"
 local-ip-address = "0.6"
 url = "2"
 flume = "0.11"
