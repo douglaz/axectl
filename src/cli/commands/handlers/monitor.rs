@@ -23,6 +23,35 @@ pub async fn monitor(config: MonitorConfig<'_>) -> Result<()> {
     use crate::output::{print_error, print_info, print_json, print_warning};
     use crate::storage::GLOBAL_STORAGE;
 
+    // Require cache_dir for monitor command
+    let cache_path = match config.cache_dir {
+        Some(path) => path,
+        None => {
+            match config.format {
+                OutputFormat::Json => {
+                    let output = serde_json::json!({
+                        "error": "Cache directory required",
+                        "message": "Use --cache-dir to specify where device data is stored",
+                        "example": "axectl monitor --cache-dir ~/devices"
+                    });
+                    print_json(&output, true)?;
+                }
+                OutputFormat::Text => {
+                    print_error("Cache directory required for monitor command", config.color);
+                    print_info(
+                        "Use --cache-dir to specify where device data is stored",
+                        config.color,
+                    );
+                    print_info(
+                        "Example: axectl monitor --cache-dir ~/devices",
+                        config.color,
+                    );
+                }
+            }
+            return Ok(());
+        }
+    };
+
     let monitoring_scope = if let Some(ref type_name) = config.type_filter {
         format!("devices of type '{}'", type_name)
     } else {
@@ -58,17 +87,15 @@ pub async fn monitor(config: MonitorConfig<'_>) -> Result<()> {
     let mut cache_in_use = false;
     let mut cache_instance: Option<DeviceCache> = None;
 
-    // Load cache if available and storage is empty
-    if let Some(cache_path) = config.cache_dir {
-        match DeviceCache::load(cache_path) {
-            Ok(cache) => {
-                if !cache.is_empty() {
-                    cache_instance = Some(cache);
-                }
+    // Load cache (cache_path is now guaranteed to be available)
+    match DeviceCache::load(cache_path) {
+        Ok(cache) => {
+            if !cache.is_empty() {
+                cache_instance = Some(cache);
             }
-            Err(e) => {
-                tracing::warn!("Failed to load cache: {}", e);
-            }
+        }
+        Err(e) => {
+            tracing::warn!("Failed to load cache: {}", e);
         }
     }
 
@@ -415,8 +442,8 @@ pub async fn monitor(config: MonitorConfig<'_>) -> Result<()> {
             }
         }
 
-        // Save cache if available and updated
-        if let (Some(ref cache), Some(cache_path)) = (&cache_instance, config.cache_dir) {
+        // Save cache if available and updated (cache_path is now guaranteed to be available)
+        if let Some(ref cache) = cache_instance {
             if let Err(e) = cache.save(cache_path) {
                 tracing::warn!("Failed to save cache: {}", e);
             }
