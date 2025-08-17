@@ -1,23 +1,67 @@
 use colored::*;
+use std::fmt;
 use tabled::{Table, Tabled};
 
 pub trait TextOutput {
     fn format_text(&self, color: bool) -> String;
 }
 
+/// Wrapper for temperature values that handles coloring
+#[derive(Clone)]
+pub struct ColoredTemperature {
+    pub value: f64,
+    pub use_color: bool,
+}
+
+impl ColoredTemperature {
+    pub fn new(value: f64, use_color: bool) -> Self {
+        Self { value, use_color }
+    }
+}
+
+impl fmt::Display for ColoredTemperature {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let temp_str = format!("{:.1}°C", self.value);
+        if self.use_color {
+            let colored = if self.value >= 80.0 {
+                temp_str.red()
+            } else if self.value >= 70.0 {
+                temp_str.yellow()
+            } else {
+                temp_str.green()
+            };
+            write!(f, "{}", colored)
+        } else {
+            write!(f, "{}", temp_str)
+        }
+    }
+}
+
+impl Tabled for ColoredTemperature {
+    const LENGTH: usize = 1;
+
+    fn fields(&self) -> Vec<std::borrow::Cow<'_, str>> {
+        vec![std::borrow::Cow::Owned(self.to_string())]
+    }
+
+    fn headers() -> Vec<std::borrow::Cow<'static, str>> {
+        vec![std::borrow::Cow::Borrowed("Temp")]
+    }
+}
+
 pub fn print_success(message: &str, color: bool) {
     if color {
-        println!("{} {}", "✓".green().bold(), message);
+        eprintln!("{} {}", "✓".green().bold(), message);
     } else {
-        println!("✓ {}", message);
+        eprintln!("✓ {}", message);
     }
 }
 
 pub fn print_warning(message: &str, color: bool) {
     if color {
-        println!("{} {}", "⚠️".yellow().bold(), message);
+        eprintln!("{} {}", "⚠️".yellow().bold(), message);
     } else {
-        println!("⚠️ {}", message);
+        eprintln!("⚠️ {}", message);
     }
 }
 
@@ -31,9 +75,9 @@ pub fn print_error(message: &str, color: bool) {
 
 pub fn print_info(message: &str, color: bool) {
     if color {
-        println!("{} {}", "ℹ".blue().bold(), message);
+        eprintln!("{} {}", "ℹ".blue().bold(), message);
     } else {
-        println!("ℹ {}", message);
+        eprintln!("ℹ {}", message);
     }
 }
 

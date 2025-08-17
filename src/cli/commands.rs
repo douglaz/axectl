@@ -50,17 +50,15 @@ pub enum Commands {
         no_mdns: bool,
     },
 
-    /// List known devices
+    /// List known devices with statistics
     List {
         /// Include offline devices
         #[arg(long)]
         all: bool,
-    },
 
-    /// Show device statistics
-    Stats {
-        /// Specific device name or IP (all devices if not specified)
-        device: Option<String>,
+        /// Skip fetching live statistics (faster)
+        #[arg(long)]
+        no_stats: bool,
 
         /// Enable continuous monitoring
         #[arg(long, short)]
@@ -69,6 +67,22 @@ pub enum Commands {
         /// Update interval in seconds (with --watch)
         #[arg(long, default_value = "30")]
         interval: u64,
+
+        /// Perform network discovery before listing
+        #[arg(long)]
+        discover: bool,
+
+        /// Network range to scan (auto-detected if not specified, only with --discover)
+        #[arg(long)]
+        network: Option<String>,
+
+        /// Discovery timeout in seconds (only with --discover)
+        #[arg(long, default_value = "30")]
+        timeout: u64,
+
+        /// Skip mDNS discovery (only with --discover)
+        #[arg(long)]
+        no_mdns: bool,
     },
 
     /// Control a device
@@ -313,7 +327,10 @@ impl Cli {
     pub async fn run(self) -> Result<()> {
         // Initialize logging
         if self.verbose {
-            tracing_subscriber::fmt::init();
+            // Configure tracing to output to stderr instead of stdout
+            tracing_subscriber::fmt()
+                .with_writer(std::io::stderr)
+                .init();
         }
 
         match self.command {
@@ -332,23 +349,30 @@ impl Cli {
                 )
                 .await
             }
-            Commands::List { all } => {
-                handlers::list(all, self.format, !self.no_color, self.cache_dir.as_deref()).await
-            }
-            Commands::Stats {
-                device,
+            Commands::List {
+                all,
+                no_stats,
                 watch,
                 interval,
+                discover,
+                network,
+                timeout,
+                no_mdns,
             } => {
-                handlers::stats(
-                    device,
+                let args = handlers::ListArgs {
+                    all,
+                    no_stats,
                     watch,
                     interval,
-                    self.format,
-                    !self.no_color,
-                    self.cache_dir.as_deref(),
-                )
-                .await
+                    discover,
+                    network,
+                    timeout,
+                    no_mdns,
+                    format: self.format,
+                    color: !self.no_color,
+                    cache_dir: self.cache_dir.as_deref(),
+                };
+                handlers::list(args).await
             }
             Commands::Control { device, action } => {
                 handlers::control(

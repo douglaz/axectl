@@ -16,7 +16,7 @@ futures = "0.3"
 
 # CLI
 clap = { version = "4", features = ["derive"] }
-tabled = "0.20"
+tabled = { version = "0.20", features = ["std", "ansi"] }
 colored = "3"
 
 # Network

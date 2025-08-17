@@ -177,12 +177,12 @@ mod tests {
         match auto_detect_network() {
             Ok(network) => {
                 let info = get_network_info(&network);
-                println!("Detected network: {}", info.network_str);
+                eprintln!("Detected network: {}", info.network_str);
                 assert!(info.is_private); // Local networks should be private
             }
             Err(e) => {
                 // In some test environments, this might fail
-                println!(
+                eprintln!(
                     "Auto-detection failed (expected in some environments): {}",
                     e
                 );
