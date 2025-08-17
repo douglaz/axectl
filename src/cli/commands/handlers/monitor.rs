@@ -96,7 +96,10 @@ pub async fn monitor(config: MonitorConfig<'_>) -> Result<()> {
                 }
                 Err(e) => {
                     if matches!(config.format, OutputFormat::Text) {
-                        print_error(&format!("Failed to get devices by type: {}", e), config.color);
+                        print_error(
+                            &format!("Failed to get devices by type: {}", e),
+                            config.color,
+                        );
                     }
                     sleep(Duration::from_secs(config.interval)).await;
                     continue;
@@ -141,7 +144,10 @@ pub async fn monitor(config: MonitorConfig<'_>) -> Result<()> {
                     &format!("📦 Using cached devices ({} minutes old)", age_minutes),
                     config.color,
                 );
-                print_info("Device stats will be fetched live from network", config.color);
+                print_info(
+                    "Device stats will be fetched live from network",
+                    config.color,
+                );
             }
         }
 
