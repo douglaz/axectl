@@ -48,11 +48,19 @@ impl DeviceCache {
             return Ok(Self::new());
         }
 
-        let content = fs::read_to_string(&cache_file)
-            .with_context(|| format!("Failed to read cache file: {}", cache_file.display()))?;
+        let content = fs::read_to_string(&cache_file).with_context(|| {
+            format!(
+                "Failed to read cache file: {path}",
+                path = cache_file.display()
+            )
+        })?;
 
-        let cache: DeviceCache = serde_json::from_str(&content)
-            .with_context(|| format!("Failed to parse cache file: {}", cache_file.display()))?;
+        let cache: DeviceCache = serde_json::from_str(&content).with_context(|| {
+            format!(
+                "Failed to parse cache file: {path}",
+                path = cache_file.display()
+            )
+        })?;
 
         // Only support version 2
         if cache.version != 2 {
@@ -70,15 +78,22 @@ impl DeviceCache {
     pub fn save(&self, cache_dir: &Path) -> Result<()> {
         // Create cache directory if it doesn't exist
         fs::create_dir_all(cache_dir).with_context(|| {
-            format!("Failed to create cache directory: {}", cache_dir.display())
+            format!(
+                "Failed to create cache directory: {path}",
+                path = cache_dir.display()
+            )
         })?;
 
         let cache_file = cache_dir.join("devices.json");
 
         let content = serde_json::to_string_pretty(self).context("Failed to serialize cache")?;
 
-        fs::write(&cache_file, content)
-            .with_context(|| format!("Failed to write cache file: {}", cache_file.display()))?;
+        fs::write(&cache_file, content).with_context(|| {
+            format!(
+                "Failed to write cache file: {path}",
+                path = cache_file.display()
+            )
+        })?;
 
         Ok(())
     }

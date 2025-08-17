@@ -44,7 +44,7 @@ pub async fn stats(
             if let Some(dev) = GLOBAL_STORAGE.find_device(device_id)? {
                 vec![dev]
             } else {
-                print_error(&format!("Device not found: {}", device_id), color);
+                print_error(&format!("Device not found: {device_id}"), color);
                 print_info("Use 'axectl list' to see available devices", color);
                 return Ok(());
             }
@@ -114,7 +114,7 @@ pub async fn stats(
                             hashrate: format_hashrate(stats.hashrate_mhs),
                             temperature: format_temperature(stats.temperature_celsius, color),
                             power: format_power(stats.power_watts),
-                            fan_speed: format!("{}", stats.fan_speed_rpm),
+                            fan_speed: format!("{fan_speed}", fan_speed = stats.fan_speed_rpm),
                             uptime: format_uptime(stats.uptime_seconds),
                             pool: stats.pool_url.as_deref().unwrap_or("Unknown").to_string(),
                         })
@@ -152,7 +152,10 @@ pub async fn stats(
 
         if !matches!(format, OutputFormat::Json) {
             print_info(
-                &format!("Updating in {}s... (Ctrl+C to stop)", interval),
+                &format!(
+                    "Updating in {interval}s... (Ctrl+C to stop)",
+                    interval = interval
+                ),
                 color,
             );
         }

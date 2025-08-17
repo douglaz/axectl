@@ -140,7 +140,7 @@ async fn scan_single_address(ip: IpAddr, config: ScanConfig) -> Result<Option<De
             // it might be an AxeOS device that's not fully responsive
             if !config.axeos_only {
                 let device = DeviceInfo {
-                    name: format!("Unknown-{}", ip_str),
+                    name: format!("Unknown-{ip_str}"),
                     ip_address: ip_str,
                     device_type: DeviceType::Unknown,
                     serial_number: None,
@@ -156,7 +156,7 @@ async fn scan_single_address(ip: IpAddr, config: ScanConfig) -> Result<Option<De
             // Device not responsive or error
             if config.include_unreachable {
                 let device = DeviceInfo {
-                    name: format!("Offline-{}", ip_str),
+                    name: format!("Offline-{ip_str}"),
                     ip_address: ip_str,
                     device_type: DeviceType::Unknown,
                     serial_number: None,

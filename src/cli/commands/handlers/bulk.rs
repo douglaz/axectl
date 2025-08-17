@@ -37,13 +37,13 @@ pub async fn bulk(
                         OutputFormat::Json => {
                             let output = serde_json::json!({
                                 "success": false,
-                                "error": format!("Group not found: {}", group),
+                                "error": format!("Group not found: {group}"),
                                 "timestamp": chrono::Utc::now()
                             });
                             print_json(&output, true)?;
                         }
                         OutputFormat::Text => {
-                            print_error(&format!("Group not found: {}", group), color);
+                            print_error(&format!("Group not found: {group}"), color);
                         }
                     }
                     return Ok(());
@@ -59,7 +59,7 @@ pub async fn bulk(
                             print_json(&output, true)?;
                         }
                         OutputFormat::Text => {
-                            print_error(&format!("Failed to find group: {}", e), color);
+                            print_error(&format!("Failed to find group: {e}"), color);
                         }
                     }
                     return Ok(());
@@ -82,7 +82,7 @@ pub async fn bulk(
                             print_json(&output, true)?;
                         }
                         OutputFormat::Text => {
-                            print_error(&format!("Failed to get group devices: {}", e), color);
+                            print_error(&format!("Failed to get group devices: {e}"), color);
                         }
                     }
                     return Ok(());
@@ -161,7 +161,7 @@ pub async fn bulk(
                             Err(e) => (
                                 device_clone.name.clone(),
                                 false,
-                                format!("Failed to create client: {}", e),
+                                format!("Failed to create client: {e}"),
                             ),
                         }
                     }
@@ -215,7 +215,10 @@ pub async fn bulk(
                     println!();
                     if failed == 0 {
                         print_success(
-                            &format!("Successfully restarted all {} devices", successful),
+                            &format!(
+                                "Successfully restarted all {successful} devices",
+                                successful = successful
+                            ),
                             color,
                         );
                     } else {
@@ -244,13 +247,13 @@ pub async fn bulk(
                         OutputFormat::Json => {
                             let output = serde_json::json!({
                                 "success": false,
-                                "error": format!("Group not found: {}", group),
+                                "error": format!("Group not found: {group}"),
                                 "timestamp": chrono::Utc::now()
                             });
                             print_json(&output, true)?;
                         }
                         OutputFormat::Text => {
-                            print_error(&format!("Group not found: {}", group), color);
+                            print_error(&format!("Group not found: {group}"), color);
                         }
                     }
                     return Ok(());
@@ -266,7 +269,7 @@ pub async fn bulk(
                             print_json(&output, true)?;
                         }
                         OutputFormat::Text => {
-                            print_error(&format!("Failed to find group: {}", e), color);
+                            print_error(&format!("Failed to find group: {e}"), color);
                         }
                     }
                     return Ok(());
@@ -289,7 +292,7 @@ pub async fn bulk(
                             print_json(&output, true)?;
                         }
                         OutputFormat::Text => {
-                            print_error(&format!("Failed to get group devices: {}", e), color);
+                            print_error(&format!("Failed to get group devices: {e}"), color);
                         }
                     }
                     return Ok(());
@@ -315,8 +318,8 @@ pub async fn bulk(
 
             // Confirmation prompt
             if !force {
-                print_info(&format!("Are you sure you want to set fan speed to {}% on {} devices in group '{}'? [y/N]: ", 
-                    speed, devices.len(), group_info.name), color);
+                print_info(&format!("Are you sure you want to set fan speed to {speed}% on {count} devices in group '{name}'? [y/N]: ", 
+                    speed = speed, count = devices.len(), name = group_info.name), color);
                 let mut input = String::new();
                 if std::io::stdin().read_line(&mut input).is_ok() {
                     let input = input.trim().to_lowercase();
@@ -364,7 +367,7 @@ pub async fn bulk(
                             Err(e) => (
                                 device_clone.name.clone(),
                                 false,
-                                format!("Failed to create client: {}", e),
+                                format!("Failed to create client: {e}"),
                             ),
                         }
                     }
@@ -419,7 +422,10 @@ pub async fn bulk(
                     println!();
                     if failed == 0 {
                         print_success(
-                            &format!("Successfully set fan speed on all {} devices", successful),
+                            &format!(
+                                "Successfully set fan speed on all {successful} devices",
+                                successful = successful
+                            ),
                             color,
                         );
                     } else {
@@ -448,13 +454,13 @@ pub async fn bulk(
                         OutputFormat::Json => {
                             let output = serde_json::json!({
                                 "success": false,
-                                "error": format!("Invalid settings JSON: {}", e),
+                                "error": format!("Invalid settings JSON: {e}"),
                                 "timestamp": chrono::Utc::now()
                             });
                             print_json(&output, true)?;
                         }
                         OutputFormat::Text => {
-                            print_error(&format!("Invalid settings JSON: {}", e), color);
+                            print_error(&format!("Invalid settings JSON: {e}"), color);
                         }
                     }
                     return Ok(());
@@ -469,13 +475,13 @@ pub async fn bulk(
                         OutputFormat::Json => {
                             let output = serde_json::json!({
                                 "success": false,
-                                "error": format!("Group not found: {}", group),
+                                "error": format!("Group not found: {group}"),
                                 "timestamp": chrono::Utc::now()
                             });
                             print_json(&output, true)?;
                         }
                         OutputFormat::Text => {
-                            print_error(&format!("Group not found: {}", group), color);
+                            print_error(&format!("Group not found: {group}"), color);
                         }
                     }
                     return Ok(());
@@ -491,7 +497,7 @@ pub async fn bulk(
                             print_json(&output, true)?;
                         }
                         OutputFormat::Text => {
-                            print_error(&format!("Failed to find group: {}", e), color);
+                            print_error(&format!("Failed to find group: {e}"), color);
                         }
                     }
                     return Ok(());
@@ -513,7 +519,7 @@ pub async fn bulk(
                             print_json(&output, true)?;
                         }
                         OutputFormat::Text => {
-                            print_error(&format!("Failed to get group devices: {}", e), color);
+                            print_error(&format!("Failed to get group devices: {e}"), color);
                         }
                     }
                     return Ok(());
@@ -539,8 +545,8 @@ pub async fn bulk(
 
             // Confirmation prompt
             if !force {
-                print_info(&format!("Are you sure you want to update settings on {} devices in group '{}'? [y/N]: ", 
-                    devices.len(), group_info.name), color);
+                print_info(&format!("Are you sure you want to update settings on {count} devices in group '{name}'? [y/N]: ", 
+                    count = devices.len(), name = group_info.name), color);
                 let mut input = String::new();
                 if std::io::stdin().read_line(&mut input).is_ok() {
                     let input = input.trim().to_lowercase();
@@ -587,7 +593,7 @@ pub async fn bulk(
                             Err(e) => (
                                 device_clone.name.clone(),
                                 false,
-                                format!("Failed to create client: {}", e),
+                                format!("Failed to create client: {e}"),
                             ),
                         }
                     }
@@ -669,13 +675,13 @@ pub async fn bulk(
                         OutputFormat::Json => {
                             let output = serde_json::json!({
                                 "success": false,
-                                "error": format!("Group not found: {}", group),
+                                "error": format!("Group not found: {group}"),
                                 "timestamp": chrono::Utc::now()
                             });
                             print_json(&output, true)?;
                         }
                         OutputFormat::Text => {
-                            print_error(&format!("Group not found: {}", group), color);
+                            print_error(&format!("Group not found: {group}"), color);
                         }
                     }
                     return Ok(());
@@ -691,7 +697,7 @@ pub async fn bulk(
                             print_json(&output, true)?;
                         }
                         OutputFormat::Text => {
-                            print_error(&format!("Failed to find group: {}", e), color);
+                            print_error(&format!("Failed to find group: {e}"), color);
                         }
                     }
                     return Ok(());
@@ -713,7 +719,7 @@ pub async fn bulk(
                             print_json(&output, true)?;
                         }
                         OutputFormat::Text => {
-                            print_error(&format!("Failed to get group devices: {}", e), color);
+                            print_error(&format!("Failed to get group devices: {e}"), color);
                         }
                     }
                     return Ok(());
@@ -761,7 +767,10 @@ pub async fn bulk(
                                 Ok(scan_result) => (
                                     device_clone.name.clone(),
                                     true,
-                                    format!("Found {} networks", scan_result.networks.len()),
+                                    format!(
+                                        "Found {count} networks",
+                                        count = scan_result.networks.len()
+                                    ),
                                     Some(scan_result),
                                 ),
                                 Err(e) => (device_clone.name.clone(), false, e.to_string(), None),
@@ -769,7 +778,7 @@ pub async fn bulk(
                             Err(e) => (
                                 device_clone.name.clone(),
                                 false,
-                                format!("Failed to create client: {}", e),
+                                format!("Failed to create client: {e}"),
                                 None,
                             ),
                         }
@@ -819,25 +828,32 @@ pub async fn bulk(
                         let message = result["message"].as_str().unwrap_or("");
 
                         if success {
-                            println!("✓ {}: {}", device, message);
+                            println!("✓ {device}: {message}", device = device, message = message);
                             if let Some(networks) = result["wifi_networks"]["networks"].as_array() {
                                 for network in networks {
                                     if let (Some(ssid), Some(rssi)) =
                                         (network["ssid"].as_str(), network["rssi"].as_i64())
                                     {
-                                        println!("    {} ({}dBm)", ssid, rssi);
+                                        println!(
+                                            "    {ssid} ({rssi}dBm)",
+                                            ssid = ssid,
+                                            rssi = rssi
+                                        );
                                     }
                                 }
                                 println!();
                             }
                         } else {
-                            println!("✗ {}: {}", device, message);
+                            println!("✗ {device}: {message}", device = device, message = message);
                         }
                     }
 
                     if failed == 0 {
                         print_success(
-                            &format!("Successfully scanned WiFi on all {} devices", successful),
+                            &format!(
+                                "Successfully scanned WiFi on all {successful} devices",
+                                successful = successful
+                            ),
                             color,
                         );
                     } else {
