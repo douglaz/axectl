@@ -15,16 +15,16 @@ struct DeviceTableRow {
     status: String,
 }
 
-pub async fn discover(
+/// Perform network discovery and return discovered devices
+pub async fn perform_discovery(
     network: Option<String>,
     timeout: u64,
     mdns_enabled: bool,
-    format: OutputFormat,
-    color: bool,
     cache_dir: Option<&std::path::Path>,
-) -> Result<()> {
+    color: bool,
+) -> Result<Vec<crate::api::DeviceInfo>> {
     use crate::discovery::{mdns, network as net_utils, scanner};
-    use crate::output::{format_table, print_info, print_json, print_success};
+    use crate::output::print_info;
 
     let discovery_timeout = Duration::from_secs(timeout);
     let mut all_devices = Vec::new();
@@ -183,6 +183,34 @@ pub async fn discover(
         }
     }
 
+    Ok(all_devices)
+}
+
+pub async fn discover(
+    network: Option<String>,
+    timeout: u64,
+    mdns_enabled: bool,
+    format: OutputFormat,
+    color: bool,
+    cache_dir: Option<&std::path::Path>,
+) -> Result<()> {
+    use crate::output::{format_table, print_info, print_json, print_success};
+
+    // Perform discovery using the shared function
+    let all_devices =
+        perform_discovery(network.clone(), timeout, mdns_enabled, cache_dir, color).await?;
+
+    // Get network info for output
+    let network_info = if let Some(net_str) = network {
+        crate::discovery::network::get_network_info(&crate::discovery::network::parse_network(
+            &net_str,
+        )?)
+    } else {
+        crate::discovery::network::get_network_info(
+            &crate::discovery::network::auto_detect_network()?,
+        )
+    };
+
     // Output results
     match format {
         OutputFormat::Json => {
@@ -214,6 +242,16 @@ pub async fn discover(
 
                 println!("{}", format_table(table_rows, color));
                 print_success(&format!("Found {} device(s)", all_devices.len()), color);
+
+                // Suggest using cache if not already
+                if cache_dir.is_none() && !all_devices.is_empty() {
+                    eprintln!();
+                    print_info(
+                        "💡 Tip: Use --cache-dir to save discovered devices for faster access",
+                        color,
+                    );
+                    print_info("   Example: axectl discover --cache-dir ~/devices", color);
+                }
             }
         }
     }

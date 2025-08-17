@@ -169,6 +169,23 @@ impl DeviceCache {
         self.devices.get(ip_address)
     }
 
+    /// Find device by name or IP
+    pub fn find_device(&self, identifier: &str) -> Option<DeviceInfo> {
+        // Try IP address first
+        if let Some(cached) = self.devices.get(identifier) {
+            return Some(cached.info.clone());
+        }
+
+        // Try name match
+        for cached in self.devices.values() {
+            if cached.info.name == identifier {
+                return Some(cached.info.clone());
+            }
+        }
+
+        None
+    }
+
     /// Get all devices
     pub fn get_all_devices(&self) -> Vec<DeviceInfo> {
         self.devices

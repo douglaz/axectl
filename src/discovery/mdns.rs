@@ -340,7 +340,7 @@ mod tests {
         let devices = result.unwrap();
         // In most test environments, we expect to find no devices
         // but the function should complete successfully
-        println!("Found {} devices via mDNS", devices.len());
+        eprintln!("Found {} devices via mDNS", devices.len());
     }
 
     #[tokio::test]
