@@ -5,23 +5,25 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::time::sleep;
 
-pub async fn monitor(
-    interval: u64,
-    temp_alert: Option<f64>,
-    hashrate_alert: Option<f64>,
-    _db: Option<PathBuf>,
-    type_filter: Option<String>,
-    type_summary: bool,
-    format: OutputFormat,
-    color: bool,
-    cache_dir: Option<&Path>,
-) -> Result<()> {
+pub struct MonitorConfig<'a> {
+    pub interval: u64,
+    pub temp_alert: Option<f64>,
+    pub hashrate_alert: Option<f64>,
+    pub db: Option<PathBuf>,
+    pub type_filter: Option<String>,
+    pub type_summary: bool,
+    pub format: OutputFormat,
+    pub color: bool,
+    pub cache_dir: Option<&'a Path>,
+}
+
+pub async fn monitor(config: MonitorConfig<'_>) -> Result<()> {
     use crate::api::DeviceStatus;
     use crate::cache::DeviceCache;
     use crate::output::{print_error, print_info, print_json, print_warning};
     use crate::storage::GLOBAL_STORAGE;
 
-    let monitoring_scope = if let Some(ref type_name) = type_filter {
+    let monitoring_scope = if let Some(ref type_name) = config.type_filter {
         format!("devices of type '{}'", type_name)
     } else {
         "all devices".to_string()
@@ -30,26 +32,26 @@ pub async fn monitor(
     print_info(
         &format!(
             "Starting continuous monitoring of {} ({}s interval)",
-            monitoring_scope, interval
+            monitoring_scope, config.interval
         ),
-        color,
+        config.color,
     );
-    if let Some(temp) = temp_alert {
+    if let Some(temp) = config.temp_alert {
         print_info(
             &format!("Temperature alert threshold: {:.1}°C", temp),
-            color,
+            config.color,
         );
     }
-    if let Some(hashrate) = hashrate_alert {
+    if let Some(hashrate) = config.hashrate_alert {
         print_info(
             &format!("Hashrate drop alert threshold: {:.1}%", hashrate),
-            color,
+            config.color,
         );
     }
-    if type_summary {
-        print_info("Showing per-type summaries", color);
+    if config.type_summary {
+        print_info("Showing per-type summaries", config.color);
     }
-    print_info("Press Ctrl+C to stop monitoring", color);
+    print_info("Press Ctrl+C to stop monitoring", config.color);
 
     let mut previous_hashrates: HashMap<String, f64> = HashMap::new();
     let mut alert_count = 0;
@@ -57,7 +59,7 @@ pub async fn monitor(
     let mut cache_instance: Option<DeviceCache> = None;
 
     // Load cache if available and storage is empty
-    if let Some(cache_path) = cache_dir {
+    if let Some(cache_path) = config.cache_dir {
         match DeviceCache::load(cache_path) {
             Ok(cache) => {
                 if !cache.is_empty() {
@@ -71,7 +73,7 @@ pub async fn monitor(
     }
 
     loop {
-        let devices = if let Some(ref type_name) = type_filter {
+        let devices = if let Some(ref type_name) = config.type_filter {
             // Monitor only devices of the specified type
             match GLOBAL_STORAGE.get_online_devices_by_type_filter(type_name) {
                 Ok(devices) => {
@@ -93,10 +95,10 @@ pub async fn monitor(
                     }
                 }
                 Err(e) => {
-                    if matches!(format, OutputFormat::Text) {
-                        print_error(&format!("Failed to get devices by type: {}", e), color);
+                    if matches!(config.format, OutputFormat::Text) {
+                        print_error(&format!("Failed to get devices by type: {}", e), config.color);
                     }
-                    sleep(Duration::from_secs(interval)).await;
+                    sleep(Duration::from_secs(config.interval)).await;
                     continue;
                 }
             }
@@ -122,30 +124,30 @@ pub async fn monitor(
                     }
                 }
                 Err(e) => {
-                    if matches!(format, OutputFormat::Text) {
-                        print_error(&format!("Failed to get devices: {}", e), color);
+                    if matches!(config.format, OutputFormat::Text) {
+                        print_error(&format!("Failed to get devices: {}", e), config.color);
                     }
-                    sleep(Duration::from_secs(interval)).await;
+                    sleep(Duration::from_secs(config.interval)).await;
                     continue;
                 }
             }
         };
 
         // Show cache warning on first iteration if using cache
-        if cache_in_use && alert_count == 0 && matches!(format, OutputFormat::Text) {
+        if cache_in_use && alert_count == 0 && matches!(config.format, OutputFormat::Text) {
             if let Some(ref cache) = cache_instance {
                 let age_minutes = cache.age_seconds() / 60;
                 print_warning(
                     &format!("📦 Using cached devices ({} minutes old)", age_minutes),
-                    color,
+                    config.color,
                 );
-                print_info("Device stats will be fetched live from network", color);
+                print_info("Device stats will be fetched live from network", config.color);
             }
         }
 
         if devices.is_empty() {
-            if matches!(format, OutputFormat::Text) {
-                if let Some(ref type_name) = type_filter {
+            if matches!(config.format, OutputFormat::Text) {
+                if let Some(ref type_name) = config.type_filter {
                     // Check if type filter is valid by looking in both storage and cache
                     let all_devices_storage = GLOBAL_STORAGE
                         .get_devices_by_type_filter(type_name)
@@ -159,19 +161,19 @@ pub async fn monitor(
                     if all_devices_storage.is_empty() && all_devices_cache.is_empty() {
                         print_error(
                             &format!("No devices found for type filter: '{}'", type_name),
-                            color,
+                            config.color,
                         );
-                        print_info("Available types: bitaxe-ultra, bitaxe-max, bitaxe-gamma, nerdqaxe, bitaxe (all bitaxe), all", color);
+                        print_info("Available types: bitaxe-ultra, bitaxe-max, bitaxe-gamma, nerdqaxe, bitaxe (all bitaxe), all", config.color);
                         return Ok(());
                     } else {
-                        print_info("No online devices of the specified type", color);
+                        print_info("No online devices of the specified type", config.color);
                     }
                 } else {
-                    print_info("No online devices to monitor", color);
-                    print_info("Run 'axectl discover' to find devices", color);
+                    print_info("No online devices to monitor", config.color);
+                    print_info("Run 'axectl discover' to find devices", config.color);
                 }
             }
-            sleep(Duration::from_secs(interval)).await;
+            sleep(Duration::from_secs(config.interval)).await;
             continue;
         }
 
@@ -193,7 +195,7 @@ pub async fn monitor(
                     }
 
                     // Check for alerts
-                    if let Some(temp_threshold) = temp_alert {
+                    if let Some(temp_threshold) = config.temp_alert {
                         if stats.temperature_celsius > temp_threshold {
                             alerts.push(format!(
                                 "🌡️ {} temperature alert: {:.1}°C > {:.1}°C",
@@ -202,7 +204,7 @@ pub async fn monitor(
                         }
                     }
 
-                    if let Some(hashrate_threshold) = hashrate_alert {
+                    if let Some(hashrate_threshold) = config.hashrate_alert {
                         if let Some(previous_hashrate) = previous_hashrates.get(&stats.device_id) {
                             let drop_percent = ((previous_hashrate - stats.hashrate_mhs)
                                 / previous_hashrate)
@@ -239,14 +241,14 @@ pub async fn monitor(
         }
 
         // Update device offline detection
-        let _ = GLOBAL_STORAGE.mark_stale_devices_offline(interval * 3);
+        let _ = GLOBAL_STORAGE.mark_stale_devices_offline(config.interval * 3);
 
         // Output monitoring data
-        match format {
+        match config.format {
             OutputFormat::Json => {
                 let mut output = serde_json::json!({
                     "monitoring": {
-                        "interval_seconds": interval,
+                        "interval_seconds": config.interval,
                         "alerts": alerts,
                         "alert_count": alert_count,
                         "devices_monitored": devices.len(),
@@ -257,7 +259,7 @@ pub async fn monitor(
                 });
 
                 // Add type information if filtering by type
-                if let Some(ref type_name) = type_filter {
+                if let Some(ref type_name) = config.type_filter {
                     output["type_filter"] = serde_json::json!({
                         "type_name": type_name,
                         "filter_applied": true
@@ -269,7 +271,7 @@ pub async fn monitor(
                 }
 
                 // Add per-type summaries if requested
-                if type_summary {
+                if config.type_summary {
                     let type_summaries = GLOBAL_STORAGE.get_all_type_summaries()?;
                     output["type_summaries"] = serde_json::to_value(type_summaries)?;
                 }
@@ -280,7 +282,7 @@ pub async fn monitor(
                 // Clear screen for monitoring updates
                 print!("\x1B[2J\x1B[1;1H");
 
-                let title = if let Some(ref type_name) = type_filter {
+                let title = if let Some(ref type_name) = config.type_filter {
                     format!(
                         "🔍 Type Monitor '{}' - {}",
                         type_name,
@@ -307,7 +309,7 @@ pub async fn monitor(
                         .map(|s| s.temperature_celsius)
                         .fold(0.0, f64::max);
 
-                    let scope_label = if type_filter.is_some() {
+                    let scope_label = if config.type_filter.is_some() {
                         "Type"
                     } else {
                         "Total"
@@ -345,7 +347,7 @@ pub async fn monitor(
                     }
 
                     // Show per-type summaries if requested
-                    if type_summary {
+                    if config.type_summary {
                         println!();
                         println!("📊 Device Type Summaries:");
                         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -378,7 +380,7 @@ pub async fn monitor(
                         }
                     }
                 } else {
-                    print_error("No devices responding", color);
+                    print_error("No devices responding", config.color);
                 }
 
                 // Show alerts
@@ -386,7 +388,7 @@ pub async fn monitor(
                     println!();
                     println!("🚨 ALERTS:");
                     for alert in &alerts {
-                        print_warning(alert, color);
+                        print_warning(alert, config.color);
                     }
                     alert_count += alerts.len();
                 }
@@ -395,26 +397,26 @@ pub async fn monitor(
                     println!();
                     print_info(
                         &format!("Total alerts this session: {}", alert_count),
-                        color,
+                        config.color,
                     );
                 }
 
                 println!();
                 print_info(
-                    &format!("Next update in {}s... (Ctrl+C to stop)", interval),
-                    color,
+                    &format!("Next update in {}s... (Ctrl+C to stop)", config.interval),
+                    config.color,
                 );
             }
         }
 
         // Save cache if available and updated
-        if let (Some(ref cache), Some(cache_path)) = (&cache_instance, cache_dir) {
+        if let (Some(ref cache), Some(cache_path)) = (&cache_instance, config.cache_dir) {
             if let Err(e) = cache.save(cache_path) {
                 tracing::warn!("Failed to save cache: {}", e);
             }
         }
 
-        sleep(Duration::from_secs(interval)).await;
+        sleep(Duration::from_secs(config.interval)).await;
     }
 }
 

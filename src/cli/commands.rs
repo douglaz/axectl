@@ -368,17 +368,17 @@ impl Cli {
                 device_type,
                 type_summary,
             } => {
-                handlers::monitor(
+                handlers::monitor(handlers::monitor::MonitorConfig {
                     interval,
                     temp_alert,
                     hashrate_alert,
                     db,
-                    device_type,
+                    type_filter: device_type,
                     type_summary,
-                    self.format,
-                    !self.no_color,
-                    self.cache_dir.as_deref(),
-                )
+                    format: self.format,
+                    color: !self.no_color,
+                    cache_dir: self.cache_dir.as_deref(),
+                })
                 .await
             }
             Commands::Group { action } => {
