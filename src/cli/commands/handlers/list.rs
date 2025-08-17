@@ -210,6 +210,13 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
             return Ok(());
         }
 
+        // Store devices in global storage for type summaries and other operations
+        for device in &devices {
+            if let Err(e) = GLOBAL_STORAGE.upsert_device(device.clone()) {
+                tracing::warn!("Failed to save device to storage: {}", e);
+            }
+        }
+
         // Collect stats if not in no-stats mode
         let mut device_stats = Vec::new();
         let mut alerts = Vec::new();
@@ -456,35 +463,43 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
 
                 // Show type summaries if requested
                 if args.type_summary {
-                    println!();
-                    println!("📊 Device Type Summaries:");
-                    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-
-                    if let Ok(type_summaries) = GLOBAL_STORAGE.get_all_type_summaries() {
-                        if type_summaries.is_empty() {
-                            println!("   No devices found");
-                        } else {
-                            for summary in type_summaries {
-                                let status_indicator = if summary.devices_online > 0 {
-                                    "🟢"
-                                } else {
-                                    "🔴"
-                                };
-
-                                println!(
-                                    "{} {} ({}/{} online) | {} | {:.1}W | Avg: {:.1}°C",
-                                    status_indicator,
-                                    summary.type_name,
-                                    summary.devices_online,
-                                    summary.total_devices,
-                                    format_hashrate(summary.total_hashrate_mhs),
-                                    summary.total_power_watts,
-                                    summary.average_temperature
-                                );
-                            }
-                        }
+                    if args.no_stats {
+                        println!();
+                        print_info(
+                            "Type summaries require statistics (remove --no-stats flag)",
+                            args.color,
+                        );
                     } else {
-                        println!("   Failed to retrieve type summaries");
+                        println!();
+                        println!("📊 Device Type Summaries:");
+                        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+                        if let Ok(type_summaries) = GLOBAL_STORAGE.get_all_type_summaries() {
+                            if type_summaries.is_empty() {
+                                println!("   No devices found");
+                            } else {
+                                for summary in type_summaries {
+                                    let status_indicator = if summary.devices_online > 0 {
+                                        "🟢"
+                                    } else {
+                                        "🔴"
+                                    };
+
+                                    println!(
+                                        "{} {} ({}/{} online) | {} | {:.1}W | Avg: {:.1}°C",
+                                        status_indicator,
+                                        summary.type_name,
+                                        summary.devices_online,
+                                        summary.total_devices,
+                                        format_hashrate(summary.total_hashrate_mhs),
+                                        summary.total_power_watts,
+                                        summary.average_temperature
+                                    );
+                                }
+                            }
+                        } else {
+                            println!("   Failed to retrieve type summaries");
+                        }
                     }
                 }
 
