@@ -366,7 +366,7 @@ impl TypeSummary {
             0.0
         };
         Self {
-            device_type: device_type.clone(),
+            device_type,
             type_name: device_type.as_str().to_string(),
             total_devices: type_devices.len(),
             devices_online,
@@ -384,10 +384,7 @@ impl TypeSummary {
         // Group devices by type
         let mut by_type: HashMap<DeviceType, Vec<&Device>> = HashMap::new();
         for device in devices {
-            by_type
-                .entry(device.device_type.clone())
-                .or_default()
-                .push(device);
+            by_type.entry(device.device_type).or_default().push(device);
         }
 
         // Create summary for each type that has devices
