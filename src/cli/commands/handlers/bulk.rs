@@ -114,15 +114,17 @@ pub async fn bulk(
     if !force && format == OutputFormat::Text {
         print_info(
             &format!(
-                "About to perform action on {} device(s):",
-                target_devices.len()
+                "About to perform action on {count} device(s):",
+                count = target_devices.len()
             ),
             color,
         );
         for device in &target_devices {
             eprintln!(
-                "  - {} ({:?}) at {}",
-                device.name, device.device_type, device.ip_address
+                "  - {name} ({device_type:?}) at {ip_address}",
+                name = device.name,
+                device_type = device.device_type,
+                ip_address = device.ip_address
             );
         }
         eprintln!();
@@ -204,7 +206,10 @@ fn filter_devices(
 /// Execute restart on all target devices
 async fn execute_restart(devices: &[Device], format: OutputFormat, color: bool) -> Result<()> {
     if format == OutputFormat::Text {
-        print_info(&format!("Restarting {} device(s)...", devices.len()), color);
+        print_info(
+            &format!("Restarting {count} device(s)...", count = devices.len()),
+            color,
+        );
     }
 
     let mut results = Vec::new();
@@ -218,10 +223,14 @@ async fn execute_restart(devices: &[Device], format: OutputFormat, color: bool) 
 
         if format == OutputFormat::Text {
             if success {
-                print_success(&format!("✓ {} restarted", device.name), color);
+                print_success(&format!("✓ {name} restarted", name = device.name), color);
             } else {
                 print_error(
-                    &format!("✗ {} failed: {}", device.name, message.as_ref().unwrap()),
+                    &format!(
+                        "✗ {name} failed: {msg}",
+                        name = device.name,
+                        msg = message.as_ref().unwrap()
+                    ),
                     color,
                 );
             }
@@ -258,9 +267,8 @@ async fn execute_set_fan_speed(
     if format == OutputFormat::Text {
         print_info(
             &format!(
-                "Setting fan speed to {}% on {} device(s)...",
-                speed,
-                devices.len()
+                "Setting fan speed to {speed}% on {count} device(s)...",
+                count = devices.len()
             ),
             color,
         );
@@ -278,12 +286,16 @@ async fn execute_set_fan_speed(
         if format == OutputFormat::Text {
             if success {
                 print_success(
-                    &format!("✓ {} fan speed set to {}%", device.name, speed),
+                    &format!("✓ {name} fan speed set to {speed}%", name = device.name),
                     color,
                 );
             } else {
                 print_error(
-                    &format!("✗ {} failed: {}", device.name, message.as_ref().unwrap()),
+                    &format!(
+                        "✗ {name} failed: {msg}",
+                        name = device.name,
+                        msg = message.as_ref().unwrap()
+                    ),
                     color,
                 );
             }
@@ -324,7 +336,10 @@ async fn execute_update_settings(
 
     if format == OutputFormat::Text {
         print_info(
-            &format!("Updating settings on {} device(s)...", devices.len()),
+            &format!(
+                "Updating settings on {count} device(s)...",
+                count = devices.len()
+            ),
             color,
         );
     }
@@ -343,10 +358,17 @@ async fn execute_update_settings(
 
         if format == OutputFormat::Text {
             if success {
-                print_success(&format!("✓ {} settings updated", device.name), color);
+                print_success(
+                    &format!("✓ {name} settings updated", name = device.name),
+                    color,
+                );
             } else {
                 print_error(
-                    &format!("✗ {} failed: {}", device.name, message.as_ref().unwrap()),
+                    &format!(
+                        "✗ {name} failed: {msg}",
+                        name = device.name,
+                        msg = message.as_ref().unwrap()
+                    ),
                     color,
                 );
             }
@@ -378,7 +400,10 @@ async fn execute_update_settings(
 async fn execute_wifi_scan(devices: &[Device], format: OutputFormat, color: bool) -> Result<()> {
     if format == OutputFormat::Text {
         print_info(
-            &format!("Scanning WiFi on {} device(s)...", devices.len()),
+            &format!(
+                "Scanning WiFi on {count} device(s)...",
+                count = devices.len()
+            ),
             color,
         );
     }
@@ -394,21 +419,21 @@ async fn execute_wifi_scan(devices: &[Device], format: OutputFormat, color: bool
                 if format == OutputFormat::Text {
                     print_success(
                         &format!(
-                            "✓ {} found {} networks",
-                            device.name,
-                            scan_response.networks.len()
+                            "✓ {name} found {count} networks",
+                            name = device.name,
+                            count = scan_response.networks.len()
                         ),
                         color,
                     );
                     for network in &scan_response.networks {
                         eprintln!(
-                            "    - {} ({}dBm)",
-                            if network.ssid.is_empty() {
+                            "    - {ssid} ({rssi}dBm)",
+                            ssid = if network.ssid.is_empty() {
                                 "<hidden>"
                             } else {
                                 &network.ssid
                             },
-                            network.rssi
+                            rssi = network.rssi
                         );
                     }
                 }
@@ -422,7 +447,7 @@ async fn execute_wifi_scan(devices: &[Device], format: OutputFormat, color: bool
             }
             Err(e) => {
                 if format == OutputFormat::Text {
-                    print_error(&format!("✗ {} failed: {}", device.name, e), color);
+                    print_error(&format!("✗ {name} failed: {e}", name = device.name), color);
                 }
 
                 results.push(serde_json::json!({
@@ -459,9 +484,8 @@ async fn execute_update_firmware(
     if format == OutputFormat::Text {
         print_info(
             &format!(
-                "Updating firmware on {} device(s) (max {} parallel)...",
-                devices.len(),
-                parallel
+                "Updating firmware on {count} device(s) (max {parallel} parallel)...",
+                count = devices.len()
             ),
             color,
         );
@@ -493,10 +517,10 @@ async fn execute_update_firmware(
 
             if format == OutputFormat::Text {
                 if success {
-                    print_success(&format!("✓ {} firmware update started", name), color);
+                    print_success(&format!("✓ {name} firmware update started"), color);
                 } else {
                     print_error(
-                        &format!("✗ {} failed: {}", name, message.as_ref().unwrap()),
+                        &format!("✗ {name} failed: {msg}", msg = message.as_ref().unwrap()),
                         color,
                     );
                 }
@@ -537,9 +561,8 @@ async fn execute_update_axeos(
     if format == OutputFormat::Text {
         print_info(
             &format!(
-                "Updating AxeOS on {} device(s) (max {} parallel)...",
-                devices.len(),
-                parallel
+                "Updating AxeOS on {count} device(s) (max {parallel} parallel)...",
+                count = devices.len()
             ),
             color,
         );
@@ -571,10 +594,10 @@ async fn execute_update_axeos(
 
             if format == OutputFormat::Text {
                 if success {
-                    print_success(&format!("✓ {} AxeOS update started", name), color);
+                    print_success(&format!("✓ {name} AxeOS update started"), color);
                 } else {
                     print_error(
-                        &format!("✗ {} failed: {}", name, message.as_ref().unwrap()),
+                        &format!("✗ {name} failed: {msg}", msg = message.as_ref().unwrap()),
                         color,
                     );
                 }
