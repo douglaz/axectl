@@ -170,7 +170,7 @@ pub async fn discover(
     // Update cache with discovered devices
     if let (Some(ref mut cache), Some(cache_path)) = (cache.as_mut(), cache_dir) {
         for device in &all_devices {
-            cache.update_device(device);
+            cache.update_device(device.clone());
         }
 
         // Prune old devices (older than 7 days)
