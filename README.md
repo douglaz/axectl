@@ -287,8 +287,8 @@ cargo test
 cargo run -- discover --timeout 10
 
 # Lint and format
-cargo clippy
-cargo fmt
+cargo clippy --all-targets --all-features -- -D warnings
+cargo fmt --check
 ```
 
 ### Contributing
@@ -296,9 +296,9 @@ cargo fmt
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature/amazing-feature`
 3. Make your changes and add tests
-4. Ensure all tests pass: `cargo test`
+4. Ensure all tests pass: `cargo test --all-targets --all-features`
 5. Format code: `cargo fmt`
-6. Check lints: `cargo clippy`
+6. Check lints: `cargo clippy --all-targets --all-features -- -D warnings`
 7. Commit and push changes
 8. Open a Pull Request
 
