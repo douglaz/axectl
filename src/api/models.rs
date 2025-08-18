@@ -2,6 +2,8 @@ use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::fmt;
+use std::str::FromStr;
 use strum::{Display, EnumString, IntoStaticStr, VariantNames};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -100,15 +102,76 @@ impl DeviceType {
         ]
     }
 
-    /// Check if device type matches a category filter
-    pub fn matches_filter(&self, filter: &str) -> bool {
-        match filter.to_lowercase().as_str() {
-            "all" => true,
-            "bitaxe" => matches!(
-                self,
-                DeviceType::BitaxeUltra | DeviceType::BitaxeMax | DeviceType::BitaxeGamma
-            ),
-            _ => self.to_string().to_lowercase() == filter.to_lowercase(),
+    /// Check if this device type is a Bitaxe variant
+    pub fn is_bitaxe(&self) -> bool {
+        matches!(
+            self,
+            DeviceType::BitaxeUltra | DeviceType::BitaxeMax | DeviceType::BitaxeGamma
+        )
+    }
+
+    /// Check if this device type is a NerdQaxe variant
+    pub fn is_nerdqaxe(&self) -> bool {
+        matches!(self, DeviceType::NerdqaxePlus)
+    }
+}
+
+/// Device filter for querying devices by type or category
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DeviceFilter {
+    /// Match all devices
+    All,
+    /// Match any Bitaxe variant
+    AnyBitaxe,
+    /// Match any NerdQaxe variant
+    AnyNerdQaxe,
+    /// Match a specific device type
+    Specific(DeviceType),
+}
+
+impl DeviceFilter {
+    /// Check if a device type matches this filter
+    pub fn matches(&self, device_type: DeviceType) -> bool {
+        match self {
+            DeviceFilter::All => true,
+            DeviceFilter::AnyBitaxe => device_type.is_bitaxe(),
+            DeviceFilter::AnyNerdQaxe => device_type.is_nerdqaxe(),
+            DeviceFilter::Specific(dt) => device_type == *dt,
+        }
+    }
+}
+
+impl From<DeviceType> for DeviceFilter {
+    fn from(device_type: DeviceType) -> Self {
+        DeviceFilter::Specific(device_type)
+    }
+}
+
+impl FromStr for DeviceFilter {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "all" => Ok(DeviceFilter::All),
+            "bitaxe" => Ok(DeviceFilter::AnyBitaxe),
+            "nerdqaxe" => Ok(DeviceFilter::AnyNerdQaxe),
+            _ => {
+                // Try to parse as specific device type
+                DeviceType::from_str(s)
+                    .map(DeviceFilter::Specific)
+                    .map_err(|e| e.to_string())
+            }
+        }
+    }
+}
+
+impl fmt::Display for DeviceFilter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DeviceFilter::All => write!(f, "all"),
+            DeviceFilter::AnyBitaxe => write!(f, "bitaxe"),
+            DeviceFilter::AnyNerdQaxe => write!(f, "nerdqaxe"),
+            DeviceFilter::Specific(dt) => write!(f, "{}", dt),
         }
     }
 }

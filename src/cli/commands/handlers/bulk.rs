@@ -1,4 +1,6 @@
-use crate::api::{AxeOsClient, Device, DeviceStatus, DeviceType, SystemUpdateRequest};
+use crate::api::{
+    AxeOsClient, Device, DeviceFilter, DeviceStatus, DeviceType, SystemUpdateRequest,
+};
 use crate::cache::DeviceCache;
 use crate::cli::commands::{BulkAction, OutputFormat};
 use crate::output::{print_error, print_info, print_json, print_success, print_warning};
@@ -176,7 +178,8 @@ fn filter_devices(
 
     // Filter by device types
     for device_type in device_types {
-        let type_devices = cache.get_online_devices_by_type_filter(&device_type.to_string());
+        let filter = DeviceFilter::from(*device_type);
+        let type_devices = cache.get_online_devices_by_filter(filter);
         for device in type_devices {
             if !devices
                 .iter()

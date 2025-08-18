@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use crate::api::{Device, DeviceStats, DeviceStatus};
+use crate::api::{Device, DeviceFilter, DeviceStats, DeviceStatus};
 
 /// Enhanced cached device
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -200,22 +200,22 @@ impl DeviceCache {
             .collect()
     }
 
-    /// Get devices by type filter (supports wildcard matching)
-    pub fn get_devices_by_type_filter(&self, type_filter: &str) -> Vec<Device> {
+    /// Get devices by type filter
+    pub fn get_devices_by_filter(&self, filter: DeviceFilter) -> Vec<Device> {
         self.devices
             .values()
-            .filter(|cached| cached.device.device_type.matches_filter(type_filter))
+            .filter(|cached| filter.matches(cached.device.device_type))
             .map(|cached| cached.device.clone())
             .collect()
     }
 
     /// Get online devices by type filter
-    pub fn get_online_devices_by_type_filter(&self, type_filter: &str) -> Vec<Device> {
+    pub fn get_online_devices_by_filter(&self, filter: DeviceFilter) -> Vec<Device> {
         self.devices
             .values()
             .filter(|cached| {
                 cached.device.status == DeviceStatus::Online
-                    && cached.device.device_type.matches_filter(type_filter)
+                    && filter.matches(cached.device.device_type)
             })
             .map(|cached| cached.device.clone())
             .collect()

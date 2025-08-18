@@ -1,5 +1,5 @@
-use crate::api::DeviceType;
-use crate::cli::commands::OutputFormat;
+use crate::api::DeviceFilter;
+use crate::cli::commands::{DeviceFilterArg, OutputFormat};
 use anyhow::Result;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -11,7 +11,7 @@ pub struct MonitorConfig<'a> {
     pub temp_alert: Option<f64>,
     pub hashrate_alert: Option<f64>,
     pub db: Option<PathBuf>,
-    pub type_filter: Option<DeviceType>,
+    pub type_filter: Option<DeviceFilterArg>,
     pub type_summary: bool,
     pub format: OutputFormat,
     pub color: bool,
@@ -67,8 +67,9 @@ pub async fn monitor(config: MonitorConfig<'_>) -> Result<()> {
 
     loop {
         // Get devices from cache based on filter
-        let devices = if let Some(ref type_filter) = config.type_filter {
-            cache.get_online_devices_by_type_filter(&type_filter.to_string())
+        let devices = if let Some(ref device_filter_arg) = config.type_filter {
+            let filter = device_filter_arg.0;
+            cache.get_online_devices_by_filter(filter)
         } else {
             cache.get_devices_by_status(DeviceStatus::Online)
         };

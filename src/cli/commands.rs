@@ -1,7 +1,9 @@
-use crate::api::DeviceType;
+use crate::api::{DeviceFilter, DeviceType};
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::str::FromStr;
 
 #[derive(Parser)]
 #[command(name = "axectl")]
@@ -32,6 +34,26 @@ pub struct Cli {
 pub enum OutputFormat {
     Text,
     Json,
+}
+
+/// Wrapper type for device filtering in CLI that can parse both
+/// specific device types (bitaxe-ultra, nerdqaxe-plus) and
+/// group filters (bitaxe, nerdqaxe, all)
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct DeviceFilterArg(pub DeviceFilter);
+
+impl FromStr for DeviceFilterArg {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        DeviceFilter::from_str(s).map(DeviceFilterArg)
+    }
+}
+
+impl std::fmt::Display for DeviceFilterArg {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
 }
 
 #[derive(Subcommand)]
@@ -85,9 +107,9 @@ pub enum Commands {
         #[arg(long)]
         no_mdns: bool,
 
-        /// Filter devices by type (e.g., bitaxe-ultra, bitaxe-max, nerdqaxe)
+        /// Filter devices by type (e.g., bitaxe-ultra, bitaxe-max, nerdqaxe, bitaxe, all)
         #[arg(long, value_name = "TYPE")]
-        device_type: Option<DeviceType>,
+        device_type: Option<DeviceFilterArg>,
 
         /// Alert on high temperature (celsius, only with --watch)
         #[arg(long)]
@@ -132,7 +154,7 @@ pub enum Commands {
 
         /// Monitor only devices of a specific type
         #[arg(long, value_name = "TYPE")]
-        device_type: Option<DeviceType>,
+        device_type: Option<DeviceFilterArg>,
 
         /// Show per-type summaries
         #[arg(long)]

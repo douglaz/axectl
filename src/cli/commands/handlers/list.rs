@@ -1,5 +1,5 @@
-use crate::api::DeviceType;
-use crate::cli::commands::OutputFormat;
+use crate::api::DeviceFilter;
+use crate::cli::commands::{DeviceFilterArg, OutputFormat};
 use anyhow::Result;
 use std::path::Path;
 use std::time::Duration;
@@ -16,7 +16,7 @@ pub struct ListArgs<'a> {
     pub network: Option<String>,
     pub timeout: u64,
     pub no_mdns: bool,
-    pub device_type: Option<DeviceType>,
+    pub device_type: Option<DeviceFilterArg>,
     pub temp_alert: Option<f64>,
     pub hashrate_alert: Option<f64>,
     pub type_summary: bool,
@@ -133,11 +133,12 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
         let mut cache = DeviceCache::load(cache_path)?;
 
         // Apply type filtering if specified
-        let devices = if let Some(ref type_filter) = args.device_type {
+        let devices = if let Some(ref device_filter_arg) = args.device_type {
+            let filter = device_filter_arg.0;
             if args.all {
-                cache.get_devices_by_type_filter(&type_filter.to_string())
+                cache.get_devices_by_filter(filter)
             } else {
-                cache.get_online_devices_by_type_filter(&type_filter.to_string())
+                cache.get_online_devices_by_filter(filter)
             }
         } else if args.all {
             cache.get_all_devices()
