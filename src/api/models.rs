@@ -2,9 +2,12 @@ use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::fmt;
+use std::str::FromStr;
+use strum::{Display, EnumString, IntoStaticStr, VariantNames};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DeviceInfo {
+pub struct Device {
     pub name: String,
     pub ip_address: String,
     pub device_type: DeviceType,
@@ -12,19 +15,44 @@ pub struct DeviceInfo {
     pub status: DeviceStatus,
     pub discovered_at: DateTime<Utc>,
     pub last_seen: DateTime<Utc>,
+
+    /// Statistics for the device (present when online and responding)
+    pub stats: Option<DeviceStats>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+// Compatibility alias during migration
+pub type DeviceInfo = Device;
+
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Eq,
+    Hash,
+    Display,
+    EnumString,
+    VariantNames,
+    IntoStaticStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum DeviceType {
     #[serde(rename = "bitaxe_ultra")]
+    #[strum(serialize = "bitaxe-ultra")]
     BitaxeUltra,
     #[serde(rename = "bitaxe_max")]
+    #[strum(serialize = "bitaxe-max")]
     BitaxeMax,
     #[serde(rename = "bitaxe_gamma")]
+    #[strum(serialize = "bitaxe-gamma")]
     BitaxeGamma,
     #[serde(rename = "nerdqaxe_plus")]
+    #[strum(serialize = "nerdqaxe-plus")]
     NerdqaxePlus,
     #[serde(rename = "unknown")]
+    #[strum(serialize = "unknown")]
     Unknown,
 }
 
@@ -74,15 +102,76 @@ impl DeviceType {
         ]
     }
 
-    /// Check if device type matches a category filter
-    pub fn matches_filter(&self, filter: &str) -> bool {
-        match filter.to_lowercase().as_str() {
-            "all" => true,
-            "bitaxe" => matches!(
-                self,
-                DeviceType::BitaxeUltra | DeviceType::BitaxeMax | DeviceType::BitaxeGamma
-            ),
-            _ => self.cli_name() == filter.to_lowercase(),
+    /// Check if this device type is a Bitaxe variant
+    pub fn is_bitaxe(&self) -> bool {
+        matches!(
+            self,
+            DeviceType::BitaxeUltra | DeviceType::BitaxeMax | DeviceType::BitaxeGamma
+        )
+    }
+
+    /// Check if this device type is a NerdQaxe variant
+    pub fn is_nerdqaxe(&self) -> bool {
+        matches!(self, DeviceType::NerdqaxePlus)
+    }
+}
+
+/// Device filter for querying devices by type or category
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DeviceFilter {
+    /// Match all devices
+    All,
+    /// Match any Bitaxe variant
+    AnyBitaxe,
+    /// Match any NerdQaxe variant
+    AnyNerdQaxe,
+    /// Match a specific device type
+    Specific(DeviceType),
+}
+
+impl DeviceFilter {
+    /// Check if a device type matches this filter
+    pub fn matches(&self, device_type: DeviceType) -> bool {
+        match self {
+            DeviceFilter::All => true,
+            DeviceFilter::AnyBitaxe => device_type.is_bitaxe(),
+            DeviceFilter::AnyNerdQaxe => device_type.is_nerdqaxe(),
+            DeviceFilter::Specific(dt) => device_type == *dt,
+        }
+    }
+}
+
+impl From<DeviceType> for DeviceFilter {
+    fn from(device_type: DeviceType) -> Self {
+        DeviceFilter::Specific(device_type)
+    }
+}
+
+impl FromStr for DeviceFilter {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "all" => Ok(DeviceFilter::All),
+            "bitaxe" => Ok(DeviceFilter::AnyBitaxe),
+            "nerdqaxe" => Ok(DeviceFilter::AnyNerdQaxe),
+            _ => {
+                // Try to parse as specific device type
+                DeviceType::from_str(s)
+                    .map(DeviceFilter::Specific)
+                    .map_err(|e| e.to_string())
+            }
+        }
+    }
+}
+
+impl fmt::Display for DeviceFilter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DeviceFilter::All => write!(f, "all"),
+            DeviceFilter::AnyBitaxe => write!(f, "bitaxe"),
+            DeviceFilter::AnyNerdQaxe => write!(f, "nerdqaxe"),
+            DeviceFilter::Specific(dt) => write!(f, "{}", dt),
         }
     }
 }
@@ -99,7 +188,6 @@ pub enum DeviceStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeviceStats {
-    pub device_id: String,
     pub timestamp: DateTime<Utc>,
     pub hashrate_mhs: f64,
     pub temperature_celsius: f64,
@@ -114,7 +202,7 @@ pub struct DeviceStats {
     pub frequency: Option<u32>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SwarmSummary {
     pub total_devices: usize,
     pub devices_online: usize,
@@ -122,20 +210,7 @@ pub struct SwarmSummary {
     pub total_hashrate_mhs: f64,
     pub total_power_watts: f64,
     pub average_temperature: f64,
-    pub total_shares_accepted: u64,
-    pub total_shares_rejected: u64,
-    pub timestamp: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DeviceGroup {
-    pub id: String,
-    pub name: String,
-    pub description: Option<String>,
-    pub device_ids: Vec<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub tags: Vec<String>,
+    pub average_efficiency: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -148,9 +223,6 @@ pub struct TypeSummary {
     pub total_hashrate_mhs: f64,
     pub total_power_watts: f64,
     pub average_temperature: f64,
-    pub total_shares_accepted: u64,
-    pub total_shares_rejected: u64,
-    pub timestamp: DateTime<Utc>,
 }
 
 // API Response Models (matches AxeOS API)
@@ -263,13 +335,8 @@ impl From<&SystemInfoResponse> for DeviceType {
 }
 
 impl DeviceStats {
-    pub fn from_api_responses(
-        device_id: String,
-        info: &SystemInfoResponse,
-        stats: &SystemStatsResponse,
-    ) -> Self {
+    pub fn from_api_responses(info: &SystemInfoResponse, stats: &SystemStatsResponse) -> Self {
         Self {
-            device_id,
             timestamp: Utc::now(),
             hashrate_mhs: stats.hashrate,
             temperature_celsius: stats.temp,
@@ -287,22 +354,35 @@ impl DeviceStats {
 }
 
 impl SwarmSummary {
-    pub fn from_devices_and_stats(devices: &[DeviceInfo], stats: &[DeviceStats]) -> Self {
+    pub fn from_devices(devices: &[Device]) -> Self {
         let devices_online = devices
             .iter()
             .filter(|d| matches!(d.status, DeviceStatus::Online))
             .count();
         let devices_offline = devices.len() - devices_online;
 
-        let total_hashrate_mhs = stats.iter().map(|s| s.hashrate_mhs).sum();
-        let total_power_watts = stats.iter().map(|s| s.power_watts).sum();
-        let average_temperature = if !stats.is_empty() {
-            stats.iter().map(|s| s.temperature_celsius).sum::<f64>() / stats.len() as f64
+        let online_with_stats: Vec<&DeviceStats> = devices
+            .iter()
+            .filter(|d| matches!(d.status, DeviceStatus::Online))
+            .filter_map(|d| d.stats.as_ref())
+            .collect();
+
+        let total_hashrate_mhs = online_with_stats.iter().map(|s| s.hashrate_mhs).sum();
+        let total_power_watts = online_with_stats.iter().map(|s| s.power_watts).sum();
+        let average_temperature = if !online_with_stats.is_empty() {
+            online_with_stats
+                .iter()
+                .map(|s| s.temperature_celsius)
+                .sum::<f64>()
+                / online_with_stats.len() as f64
         } else {
             0.0
         };
-        let total_shares_accepted = stats.iter().map(|s| s.shares_accepted).sum();
-        let total_shares_rejected = stats.iter().map(|s| s.shares_rejected).sum();
+        let average_efficiency = if total_power_watts > 0.0 {
+            total_hashrate_mhs / total_power_watts
+        } else {
+            0.0
+        };
 
         Self {
             total_devices: devices.len(),
@@ -311,82 +391,24 @@ impl SwarmSummary {
             total_hashrate_mhs,
             total_power_watts,
             average_temperature,
-            total_shares_accepted,
-            total_shares_rejected,
-            timestamp: Utc::now(),
-        }
-    }
-}
-
-impl DeviceGroup {
-    pub fn new(name: String, description: Option<String>) -> Self {
-        let now = Utc::now();
-        Self {
-            id: uuid::Uuid::new_v4().to_string(),
-            name,
-            description,
-            device_ids: Vec::new(),
-            created_at: now,
-            updated_at: now,
-            tags: Vec::new(),
-        }
-    }
-
-    pub fn add_device(&mut self, device_id: String) {
-        if !self.device_ids.contains(&device_id) {
-            self.device_ids.push(device_id);
-            self.updated_at = Utc::now();
-        }
-    }
-
-    pub fn remove_device(&mut self, device_id: &str) -> bool {
-        if let Some(pos) = self.device_ids.iter().position(|id| id == device_id) {
-            self.device_ids.remove(pos);
-            self.updated_at = Utc::now();
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn add_tag(&mut self, tag: String) {
-        if !self.tags.contains(&tag) {
-            self.tags.push(tag);
-            self.updated_at = Utc::now();
-        }
-    }
-
-    pub fn remove_tag(&mut self, tag: &str) -> bool {
-        if let Some(pos) = self.tags.iter().position(|t| t == tag) {
-            self.tags.remove(pos);
-            self.updated_at = Utc::now();
-            true
-        } else {
-            false
+            average_efficiency,
         }
     }
 }
 
 impl TypeSummary {
-    pub fn from_devices_and_stats(
-        device_type: DeviceType,
-        devices: &[DeviceInfo],
-        stats: &[DeviceStats],
-    ) -> Self {
-        // Filter devices and stats to only include those of this type
-        let type_devices: Vec<&DeviceInfo> = devices
+    pub fn from_devices(device_type: DeviceType, devices: &[Device]) -> Self {
+        // Filter devices of this type
+        let type_devices: Vec<&Device> = devices
             .iter()
             .filter(|d| d.device_type == device_type)
             .collect();
 
-        let type_stats: Vec<&DeviceStats> = stats
+        // Get stats from online devices
+        let online_with_stats: Vec<&DeviceStats> = type_devices
             .iter()
-            .filter(|s| {
-                // Find device by ID to check type
-                devices
-                    .iter()
-                    .any(|d| d.ip_address == s.device_id && d.device_type == device_type)
-            })
+            .filter(|d| matches!(d.status, DeviceStatus::Online))
+            .filter_map(|d| d.stats.as_ref())
             .collect();
 
         let devices_online = type_devices
@@ -395,22 +417,19 @@ impl TypeSummary {
             .count();
         let devices_offline = type_devices.len() - devices_online;
 
-        let total_hashrate_mhs = type_stats.iter().map(|s| s.hashrate_mhs).sum();
-        let total_power_watts = type_stats.iter().map(|s| s.power_watts).sum();
-        let average_temperature = if !type_stats.is_empty() {
-            type_stats
+        let total_hashrate_mhs = online_with_stats.iter().map(|s| s.hashrate_mhs).sum();
+        let total_power_watts = online_with_stats.iter().map(|s| s.power_watts).sum();
+        let average_temperature = if !online_with_stats.is_empty() {
+            online_with_stats
                 .iter()
                 .map(|s| s.temperature_celsius)
                 .sum::<f64>()
-                / type_stats.len() as f64
+                / online_with_stats.len() as f64
         } else {
             0.0
         };
-        let total_shares_accepted = type_stats.iter().map(|s| s.shares_accepted).sum();
-        let total_shares_rejected = type_stats.iter().map(|s| s.shares_rejected).sum();
-
         Self {
-            device_type: device_type.clone(),
+            device_type,
             type_name: device_type.as_str().to_string(),
             total_devices: type_devices.len(),
             devices_online,
@@ -418,18 +437,28 @@ impl TypeSummary {
             total_hashrate_mhs,
             total_power_watts,
             average_temperature,
-            total_shares_accepted,
-            total_shares_rejected,
-            timestamp: Utc::now(),
         }
     }
 
     /// Get type summaries for all device types that have devices
-    pub fn from_all_devices_and_stats(devices: &[DeviceInfo], stats: &[DeviceStats]) -> Vec<Self> {
-        DeviceType::all_types()
+    pub fn from_all_devices(devices: &[Device]) -> Vec<Self> {
+        use std::collections::HashMap;
+
+        // Group devices by type
+        let mut by_type: HashMap<DeviceType, Vec<&Device>> = HashMap::new();
+        for device in devices {
+            by_type.entry(device.device_type).or_default().push(device);
+        }
+
+        // Create summary for each type that has devices
+        by_type
             .into_iter()
-            .map(|device_type| Self::from_devices_and_stats(device_type, devices, stats))
-            .filter(|summary| summary.total_devices > 0) // Only include types with devices
+            .map(|(device_type, type_devices)| {
+                Self::from_devices(
+                    device_type,
+                    &type_devices.into_iter().cloned().collect::<Vec<_>>(),
+                )
+            })
             .collect()
     }
 }
@@ -779,10 +808,7 @@ mod tests {
             session_id: Some("session123".to_string()),
         };
 
-        let device_stats =
-            DeviceStats::from_api_responses("bitaxe-test".to_string(), &system_info, &system_stats);
-
-        assert_eq!(device_stats.device_id, "bitaxe-test");
+        let device_stats = DeviceStats::from_api_responses(&system_info, &system_stats);
         assert_eq!(device_stats.hashrate_mhs, 485.2);
         assert_eq!(device_stats.temperature_celsius, 65.5);
         assert_eq!(device_stats.power_watts, 15.8);
@@ -801,8 +827,8 @@ mod tests {
 
     #[test]
     fn test_swarm_summary_calculation() {
-        let devices = vec![
-            DeviceInfo {
+        let mut devices = vec![
+            Device {
                 name: "bitaxe-1".to_string(),
                 ip_address: "192.168.1.100".to_string(),
                 device_type: DeviceType::BitaxeMax,
@@ -810,8 +836,9 @@ mod tests {
                 status: DeviceStatus::Online,
                 discovered_at: chrono::Utc::now(),
                 last_seen: chrono::Utc::now(),
+                stats: None,
             },
-            DeviceInfo {
+            Device {
                 name: "bitaxe-2".to_string(),
                 ip_address: "192.168.1.101".to_string(),
                 device_type: DeviceType::BitaxeMax,
@@ -819,11 +846,12 @@ mod tests {
                 status: DeviceStatus::Offline,
                 discovered_at: chrono::Utc::now(),
                 last_seen: chrono::Utc::now(),
+                stats: None,
             },
         ];
 
-        let stats = vec![DeviceStats {
-            device_id: "bitaxe-1".to_string(),
+        // Update first device with stats
+        devices[0].stats = Some(DeviceStats {
             timestamp: chrono::Utc::now(),
             hashrate_mhs: 485.2,
             temperature_celsius: 65.5,
@@ -836,9 +864,9 @@ mod tests {
             wifi_rssi: None,
             voltage: None,
             frequency: None,
-        }];
+        });
 
-        let summary = SwarmSummary::from_devices_and_stats(&devices, &stats);
+        let summary = SwarmSummary::from_devices(&devices);
 
         assert_eq!(summary.total_devices, 2);
         assert_eq!(summary.devices_online, 1);
@@ -846,8 +874,8 @@ mod tests {
         assert_eq!(summary.total_hashrate_mhs, 485.2);
         assert_eq!(summary.total_power_watts, 15.8);
         assert_eq!(summary.average_temperature, 65.5);
-        assert_eq!(summary.total_shares_accepted, 150);
-        assert_eq!(summary.total_shares_rejected, 2);
+        // Shares tracking removed, check efficiency instead
+        assert!(summary.average_efficiency > 0.0);
     }
 
     #[test]
@@ -882,24 +910,31 @@ mod tests {
     }
 
     #[test]
-    fn test_device_type_matches_filter() {
+    fn test_device_filter_matching() {
         let bitaxe_ultra = DeviceType::BitaxeUltra;
         let nerdqaxe = DeviceType::NerdqaxePlus;
 
-        assert!(bitaxe_ultra.matches_filter("all"));
-        assert!(bitaxe_ultra.matches_filter("bitaxe"));
-        assert!(bitaxe_ultra.matches_filter("bitaxe-ultra"));
-        assert!(!bitaxe_ultra.matches_filter("nerdqaxe"));
+        // Test All filter
+        assert!(DeviceFilter::All.matches(bitaxe_ultra));
+        assert!(DeviceFilter::All.matches(nerdqaxe));
 
-        assert!(nerdqaxe.matches_filter("all"));
-        assert!(!nerdqaxe.matches_filter("bitaxe"));
-        assert!(nerdqaxe.matches_filter("nerdqaxe"));
+        // Test AnyBitaxe filter
+        assert!(DeviceFilter::AnyBitaxe.matches(bitaxe_ultra));
+        assert!(!DeviceFilter::AnyBitaxe.matches(nerdqaxe));
+
+        // Test AnyNerdQaxe filter
+        assert!(!DeviceFilter::AnyNerdQaxe.matches(bitaxe_ultra));
+        assert!(DeviceFilter::AnyNerdQaxe.matches(nerdqaxe));
+
+        // Test Specific filter
+        assert!(DeviceFilter::Specific(DeviceType::BitaxeUltra).matches(bitaxe_ultra));
+        assert!(!DeviceFilter::Specific(DeviceType::BitaxeUltra).matches(nerdqaxe));
     }
 
     #[test]
     fn test_type_summary_calculation() {
-        let devices = vec![
-            DeviceInfo {
+        let mut devices = vec![
+            Device {
                 name: "bitaxe-1".to_string(),
                 ip_address: "192.168.1.100".to_string(),
                 device_type: DeviceType::BitaxeMax,
@@ -907,8 +942,9 @@ mod tests {
                 status: DeviceStatus::Online,
                 discovered_at: chrono::Utc::now(),
                 last_seen: chrono::Utc::now(),
+                stats: None,
             },
-            DeviceInfo {
+            Device {
                 name: "bitaxe-2".to_string(),
                 ip_address: "192.168.1.101".to_string(),
                 device_type: DeviceType::BitaxeMax,
@@ -916,8 +952,9 @@ mod tests {
                 status: DeviceStatus::Offline,
                 discovered_at: chrono::Utc::now(),
                 last_seen: chrono::Utc::now(),
+                stats: None,
             },
-            DeviceInfo {
+            Device {
                 name: "nerdqaxe-1".to_string(),
                 ip_address: "192.168.1.102".to_string(),
                 device_type: DeviceType::NerdqaxePlus,
@@ -925,44 +962,54 @@ mod tests {
                 status: DeviceStatus::Online,
                 discovered_at: chrono::Utc::now(),
                 last_seen: chrono::Utc::now(),
+                stats: None,
             },
         ];
 
-        let stats = vec![
-            DeviceStats {
-                device_id: "192.168.1.100".to_string(),
-                timestamp: chrono::Utc::now(),
-                hashrate_mhs: 485.2,
-                temperature_celsius: 65.5,
-                power_watts: 15.8,
-                fan_speed_rpm: 75,
-                shares_accepted: 150,
-                shares_rejected: 2,
-                uptime_seconds: 3600,
-                pool_url: None,
-                wifi_rssi: None,
-                voltage: None,
-                frequency: None,
-            },
-            DeviceStats {
-                device_id: "192.168.1.102".to_string(),
-                timestamp: chrono::Utc::now(),
-                hashrate_mhs: 512.7,
-                temperature_celsius: 62.8,
-                power_watts: 18.5,
-                fan_speed_rpm: 80,
-                shares_accepted: 225,
-                shares_rejected: 3,
-                uptime_seconds: 7200,
-                pool_url: None,
-                wifi_rssi: None,
-                voltage: None,
-                frequency: None,
-            },
-        ];
+        // Add stats to first and third devices
+        devices[0].stats = Some(DeviceStats {
+            timestamp: chrono::Utc::now(),
+            hashrate_mhs: 485.2,
+            temperature_celsius: 65.5,
+            power_watts: 15.8,
+            fan_speed_rpm: 75,
+            shares_accepted: 150,
+            shares_rejected: 2,
+            uptime_seconds: 3600,
+            pool_url: None,
+            wifi_rssi: None,
+            voltage: None,
+            frequency: None,
+        });
 
-        let bitaxe_summary =
-            TypeSummary::from_devices_and_stats(DeviceType::BitaxeMax, &devices, &stats);
+        devices[2].stats = Some(DeviceStats {
+            timestamp: chrono::Utc::now(),
+            hashrate_mhs: 512.7,
+            temperature_celsius: 62.8,
+            power_watts: 18.5,
+            fan_speed_rpm: 80,
+            shares_accepted: 225,
+            shares_rejected: 3,
+            uptime_seconds: 7200,
+            pool_url: None,
+            wifi_rssi: None,
+            voltage: None,
+            frequency: None,
+        });
+
+        // Filter and create summary for BitaxeMax devices
+        let bitaxe_devices: Vec<&Device> = devices
+            .iter()
+            .filter(|d| d.device_type == DeviceType::BitaxeMax)
+            .collect();
+
+        let bitaxe_summary = TypeSummary::from_devices(
+            DeviceType::BitaxeMax,
+            &bitaxe_devices
+                .iter()
+                .map(|d| (*d).clone())
+                .collect::<Vec<_>>(),
+        );
 
         assert_eq!(bitaxe_summary.device_type, DeviceType::BitaxeMax);
         assert_eq!(bitaxe_summary.type_name, "Bitaxe Max");
@@ -972,11 +1019,21 @@ mod tests {
         assert_eq!(bitaxe_summary.total_hashrate_mhs, 485.2);
         assert_eq!(bitaxe_summary.total_power_watts, 15.8);
         assert_eq!(bitaxe_summary.average_temperature, 65.5);
-        assert_eq!(bitaxe_summary.total_shares_accepted, 150);
-        assert_eq!(bitaxe_summary.total_shares_rejected, 2);
+        // Shares tracking removed from summaries
 
-        let nerdqaxe_summary =
-            TypeSummary::from_devices_and_stats(DeviceType::NerdqaxePlus, &devices, &stats);
+        // Filter and create summary for NerdqaxePlus devices
+        let nerdqaxe_devices: Vec<&Device> = devices
+            .iter()
+            .filter(|d| d.device_type == DeviceType::NerdqaxePlus)
+            .collect();
+
+        let nerdqaxe_summary = TypeSummary::from_devices(
+            DeviceType::NerdqaxePlus,
+            &nerdqaxe_devices
+                .iter()
+                .map(|d| (*d).clone())
+                .collect::<Vec<_>>(),
+        );
 
         assert_eq!(nerdqaxe_summary.device_type, DeviceType::NerdqaxePlus);
         assert_eq!(nerdqaxe_summary.type_name, "NerdQaxe++");
@@ -986,14 +1043,13 @@ mod tests {
         assert_eq!(nerdqaxe_summary.total_hashrate_mhs, 512.7);
         assert_eq!(nerdqaxe_summary.total_power_watts, 18.5);
         assert_eq!(nerdqaxe_summary.average_temperature, 62.8);
-        assert_eq!(nerdqaxe_summary.total_shares_accepted, 225);
-        assert_eq!(nerdqaxe_summary.total_shares_rejected, 3);
+        // Shares tracking removed from summaries
     }
 
     #[test]
     fn test_type_summary_from_all_devices() {
         let devices = vec![
-            DeviceInfo {
+            Device {
                 name: "bitaxe-1".to_string(),
                 ip_address: "192.168.1.100".to_string(),
                 device_type: DeviceType::BitaxeMax,
@@ -1001,8 +1057,9 @@ mod tests {
                 status: DeviceStatus::Online,
                 discovered_at: chrono::Utc::now(),
                 last_seen: chrono::Utc::now(),
+                stats: None,
             },
-            DeviceInfo {
+            Device {
                 name: "nerdqaxe-1".to_string(),
                 ip_address: "192.168.1.101".to_string(),
                 device_type: DeviceType::NerdqaxePlus,
@@ -1010,12 +1067,11 @@ mod tests {
                 status: DeviceStatus::Online,
                 discovered_at: chrono::Utc::now(),
                 last_seen: chrono::Utc::now(),
+                stats: None,
             },
         ];
 
-        let stats = vec![];
-
-        let summaries = TypeSummary::from_all_devices_and_stats(&devices, &stats);
+        let summaries = TypeSummary::from_all_devices(&devices);
 
         // Should only include types that have devices
         assert_eq!(summaries.len(), 2);

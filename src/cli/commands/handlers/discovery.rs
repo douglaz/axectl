@@ -160,12 +160,7 @@ pub async fn perform_discovery(
         }
     }
 
-    // Save discovered devices to storage
-    for device in &all_devices {
-        if let Err(e) = crate::storage::GLOBAL_STORAGE.upsert_device(device.clone()) {
-            tracing::warn!("Failed to save device to storage: {}", e);
-        }
-    }
+    // Note: Devices will be saved to cache below, no need for separate storage
 
     // Update cache with discovered devices
     if let (Some(ref mut cache), Some(cache_path)) = (cache.as_mut(), cache_dir) {

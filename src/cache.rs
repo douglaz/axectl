@@ -5,19 +5,15 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use crate::api::{DeviceInfo, DeviceStats, DeviceStatus};
+use crate::api::{Device, DeviceFilter, DeviceStats, DeviceStatus};
 
-/// Enhanced cached device with full info and stats
+/// Enhanced cached device
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CachedDevice {
-    /// Full device information
-    pub info: DeviceInfo,
-    /// Latest statistics
-    pub latest_stats: Option<DeviceStats>,
+    /// Device with optional embedded stats
+    pub device: Device,
     /// Recent statistics history (last 10 entries)
     pub stats_history: Vec<DeviceStats>,
-    /// Last time device was successfully contacted
-    pub last_seen: DateTime<Utc>,
     /// Last time device was probed (even if failed)
     pub last_probed: DateTime<Utc>,
 }
@@ -99,23 +95,23 @@ impl DeviceCache {
     }
 
     /// Add or update a device in the cache
-    pub fn add_device(&mut self, device: DeviceInfo) {
+    pub fn add_device(&mut self, device: Device) {
         let cached = CachedDevice {
-            info: device.clone(),
-            latest_stats: None,
+            device,
             stats_history: Vec::new(),
-            last_seen: Utc::now(),
             last_probed: Utc::now(),
         };
-        self.devices.insert(device.ip_address.clone(), cached);
+        self.devices
+            .insert(cached.device.ip_address.clone(), cached);
         self.last_updated = Utc::now();
     }
 
     /// Update existing device info
-    pub fn update_device(&mut self, device: DeviceInfo) {
+    pub fn update_device(&mut self, mut device: Device) {
         if let Some(cached) = self.devices.get_mut(&device.ip_address) {
-            cached.info = device;
-            cached.last_seen = Utc::now();
+            // Preserve discovered_at time
+            device.discovered_at = cached.device.discovered_at;
+            cached.device = device;
             cached.last_probed = Utc::now();
         } else {
             self.add_device(device);
@@ -126,8 +122,9 @@ impl DeviceCache {
     /// Update device stats
     pub fn update_device_stats(&mut self, device_id: &str, stats: DeviceStats) {
         if let Some(cached) = self.devices.get_mut(device_id) {
-            // Update latest stats
-            cached.latest_stats = Some(stats.clone());
+            // Update embedded stats in device
+            cached.device.stats = Some(stats.clone());
+            cached.device.last_seen = Utc::now();
 
             // Add to history (keep last 10 entries)
             cached.stats_history.push(stats);
@@ -135,7 +132,6 @@ impl DeviceCache {
                 cached.stats_history.remove(0);
             }
 
-            cached.last_seen = Utc::now();
             cached.last_probed = Utc::now();
         }
         self.last_updated = Utc::now();
@@ -146,7 +142,7 @@ impl DeviceCache {
         if let Some(cached) = self.devices.get_mut(ip_address) {
             cached.last_probed = Utc::now();
             if success {
-                cached.last_seen = Utc::now();
+                cached.device.last_seen = Utc::now();
             }
         }
         self.last_updated = Utc::now();
@@ -155,7 +151,8 @@ impl DeviceCache {
     /// Remove stale devices (not seen in specified duration)
     pub fn prune(&mut self, max_age: Duration) {
         let cutoff = Utc::now() - max_age;
-        self.devices.retain(|_, device| device.last_seen > cutoff);
+        self.devices
+            .retain(|_, cached| cached.device.last_seen > cutoff);
         self.last_updated = Utc::now();
     }
 
@@ -170,16 +167,16 @@ impl DeviceCache {
     }
 
     /// Find device by name or IP
-    pub fn find_device(&self, identifier: &str) -> Option<DeviceInfo> {
+    pub fn find_device(&self, identifier: &str) -> Option<Device> {
         // Try IP address first
         if let Some(cached) = self.devices.get(identifier) {
-            return Some(cached.info.clone());
+            return Some(cached.device.clone());
         }
 
         // Try name match
         for cached in self.devices.values() {
-            if cached.info.name == identifier {
-                return Some(cached.info.clone());
+            if cached.device.name == identifier {
+                return Some(cached.device.clone());
             }
         }
 
@@ -187,40 +184,40 @@ impl DeviceCache {
     }
 
     /// Get all devices
-    pub fn get_all_devices(&self) -> Vec<DeviceInfo> {
+    pub fn get_all_devices(&self) -> Vec<Device> {
         self.devices
             .values()
-            .map(|cached| cached.info.clone())
+            .map(|cached| cached.device.clone())
             .collect()
     }
 
     /// Get devices by status
-    pub fn get_devices_by_status(&self, status: DeviceStatus) -> Vec<DeviceInfo> {
+    pub fn get_devices_by_status(&self, status: DeviceStatus) -> Vec<Device> {
         self.devices
             .values()
-            .filter(|cached| cached.info.status == status)
-            .map(|cached| cached.info.clone())
+            .filter(|cached| cached.device.status == status)
+            .map(|cached| cached.device.clone())
             .collect()
     }
 
-    /// Get devices by type filter (supports wildcard matching)
-    pub fn get_devices_by_type_filter(&self, type_filter: &str) -> Vec<DeviceInfo> {
+    /// Get devices by type filter
+    pub fn get_devices_by_filter(&self, filter: DeviceFilter) -> Vec<Device> {
         self.devices
             .values()
-            .filter(|cached| cached.info.device_type.matches_filter(type_filter))
-            .map(|cached| cached.info.clone())
+            .filter(|cached| filter.matches(cached.device.device_type))
+            .map(|cached| cached.device.clone())
             .collect()
     }
 
     /// Get online devices by type filter
-    pub fn get_online_devices_by_type_filter(&self, type_filter: &str) -> Vec<DeviceInfo> {
+    pub fn get_online_devices_by_filter(&self, filter: DeviceFilter) -> Vec<Device> {
         self.devices
             .values()
             .filter(|cached| {
-                cached.info.status == DeviceStatus::Online
-                    && cached.info.device_type.matches_filter(type_filter)
+                cached.device.status == DeviceStatus::Online
+                    && filter.matches(cached.device.device_type)
             })
-            .map(|cached| cached.info.clone())
+            .map(|cached| cached.device.clone())
             .collect()
     }
 
@@ -252,6 +249,19 @@ impl DeviceCache {
             .filter(|(_, cached)| cached.last_probed < cutoff)
             .map(|(ip, _)| ip.clone())
             .collect()
+    }
+
+    /// Get type summaries for all device types with statistics
+    pub fn get_type_summaries(&self) -> Vec<crate::api::TypeSummary> {
+        // Get all devices with stats
+        let devices_with_stats: Vec<Device> = self
+            .devices
+            .values()
+            .map(|cached| cached.device.clone())
+            .filter(|device| device.stats.is_some())
+            .collect();
+
+        crate::api::TypeSummary::from_all_devices(&devices_with_stats)
     }
 
     /// Clear all cached data
@@ -287,7 +297,7 @@ mod tests {
         let mut cache = DeviceCache::new();
 
         // Add a device
-        let device = DeviceInfo {
+        let device = Device {
             name: "Test Device".to_string(),
             ip_address: "192.168.1.100".to_string(),
             device_type: DeviceType::BitaxeUltra,
@@ -295,6 +305,7 @@ mod tests {
             status: DeviceStatus::Online,
             discovered_at: Utc::now(),
             last_seen: Utc::now(),
+            stats: None,
         };
         cache.add_device(device.clone());
 
@@ -323,7 +334,7 @@ mod tests {
         let mut cache = DeviceCache::new();
 
         // Add devices with different last_seen times
-        let old_device = DeviceInfo {
+        let old_device = Device {
             name: "Old Device".to_string(),
             ip_address: "192.168.1.100".to_string(),
             device_type: DeviceType::BitaxeUltra,
@@ -331,9 +342,10 @@ mod tests {
             status: DeviceStatus::Online,
             discovered_at: Utc::now() - Duration::days(10),
             last_seen: Utc::now() - Duration::days(10),
+            stats: None,
         };
 
-        let new_device = DeviceInfo {
+        let new_device = Device {
             name: "New Device".to_string(),
             ip_address: "192.168.1.101".to_string(),
             device_type: DeviceType::BitaxeMax,
@@ -341,12 +353,13 @@ mod tests {
             status: DeviceStatus::Online,
             discovered_at: Utc::now(),
             last_seen: Utc::now(),
+            stats: None,
         };
 
         cache.add_device(old_device);
         // Manually set the last_seen to be old
         if let Some(cached) = cache.devices.get_mut("192.168.1.100") {
-            cached.last_seen = Utc::now() - Duration::days(10);
+            cached.device.last_seen = Utc::now() - Duration::days(10);
         }
         cache.add_device(new_device);
 
