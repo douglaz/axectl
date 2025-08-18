@@ -1,4 +1,3 @@
-use crate::api::DeviceFilter;
 use crate::cli::commands::{DeviceFilterArg, OutputFormat};
 use anyhow::Result;
 use std::path::Path;

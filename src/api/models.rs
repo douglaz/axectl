@@ -910,18 +910,25 @@ mod tests {
     }
 
     #[test]
-    fn test_device_type_matches_filter() {
+    fn test_device_filter_matching() {
         let bitaxe_ultra = DeviceType::BitaxeUltra;
         let nerdqaxe = DeviceType::NerdqaxePlus;
 
-        assert!(bitaxe_ultra.matches_filter("all"));
-        assert!(bitaxe_ultra.matches_filter("bitaxe"));
-        assert!(bitaxe_ultra.matches_filter("bitaxe-ultra"));
-        assert!(!bitaxe_ultra.matches_filter("nerdqaxe"));
+        // Test All filter
+        assert!(DeviceFilter::All.matches(bitaxe_ultra));
+        assert!(DeviceFilter::All.matches(nerdqaxe));
 
-        assert!(nerdqaxe.matches_filter("all"));
-        assert!(!nerdqaxe.matches_filter("bitaxe"));
-        assert!(nerdqaxe.matches_filter("nerdqaxe"));
+        // Test AnyBitaxe filter
+        assert!(DeviceFilter::AnyBitaxe.matches(bitaxe_ultra));
+        assert!(!DeviceFilter::AnyBitaxe.matches(nerdqaxe));
+
+        // Test AnyNerdQaxe filter
+        assert!(!DeviceFilter::AnyNerdQaxe.matches(bitaxe_ultra));
+        assert!(DeviceFilter::AnyNerdQaxe.matches(nerdqaxe));
+
+        // Test Specific filter
+        assert!(DeviceFilter::Specific(DeviceType::BitaxeUltra).matches(bitaxe_ultra));
+        assert!(!DeviceFilter::Specific(DeviceType::BitaxeUltra).matches(nerdqaxe));
     }
 
     #[test]
