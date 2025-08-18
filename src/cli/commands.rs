@@ -148,10 +148,6 @@ pub enum Commands {
         #[arg(long)]
         hashrate_alert: Option<f64>,
 
-        /// Save data to SQLite database
-        #[arg(long)]
-        db: Option<PathBuf>,
-
         /// Monitor only devices of a specific type
         #[arg(long, value_name = "TYPE")]
         device_type: Option<DeviceFilterArg>,
@@ -381,7 +377,6 @@ impl Cli {
                 interval,
                 temp_alert,
                 hashrate_alert,
-                db,
                 device_type,
                 type_summary,
             } => {
@@ -389,7 +384,6 @@ impl Cli {
                     interval,
                     temp_alert,
                     hashrate_alert,
-                    db,
                     type_filter: device_type,
                     type_summary,
                     format: self.format,

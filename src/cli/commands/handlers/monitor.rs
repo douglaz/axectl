@@ -1,7 +1,7 @@
 use crate::cli::commands::{DeviceFilterArg, OutputFormat};
 use anyhow::Result;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -9,7 +9,6 @@ pub struct MonitorConfig<'a> {
     pub interval: u64,
     pub temp_alert: Option<f64>,
     pub hashrate_alert: Option<f64>,
-    pub db: Option<PathBuf>,
     pub type_filter: Option<DeviceFilterArg>,
     pub type_summary: bool,
     pub format: OutputFormat,
