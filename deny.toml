@@ -26,6 +26,7 @@ allow = [
     "MPL-2.0",
     "Unicode-3.0",
     "Zlib",
+    "CDLA-Permissive-2.0",  # Required by webpki-roots (reqwest dependency)
 ]
 
 [bans]
