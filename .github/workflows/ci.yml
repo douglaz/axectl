@@ -131,9 +131,12 @@ jobs:
           ~/.cargo/git
         key: audit-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-    - name: Install cargo-audit
-      run: cargo install cargo-audit
+    - name: Install Nix
+      uses: cachix/install-nix-action@v31
+      with:
+        extra_nix_config: |
+          experimental-features = nix-command flakes
 
     - name: Run security audit
-      run: cargo audit
+      run: nix run nixpkgs#cargo-audit -- audit
 
