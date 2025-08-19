@@ -107,21 +107,32 @@ struct BasicMonitorTableRow {
 }
 
 pub async fn monitor_async(config: AsyncMonitorConfig<'_>) -> Result<()> {
-    // Set up alternate screen for text mode to prevent flicker
+    // Set up alternate screen for text mode to prevent flicker.
+    // The alternate screen is a separate buffer that doesn't affect the main terminal scrollback.
     let use_alternate_screen = matches!(config.format, OutputFormat::Text);
 
     if use_alternate_screen {
         let mut stdout_handle = stdout();
+        // EnterAlternateScreen: Switch to a separate screen buffer (like vim or less does)
+        // Hide: Hide the cursor for cleaner display during updates
         execute!(stdout_handle, EnterAlternateScreen, Hide)?;
     }
 
-    // Ensure we clean up on exit
+    // Create a guard that will automatically restore the terminal when this function exits.
+    // The underscore prefix (_cleanup) tells Rust we won't use this variable directly,
+    // but we want to keep it alive until the function ends.
+    // This guard ensures the terminal is restored even if the function panics or returns early.
     let _cleanup = CleanupGuard::new(use_alternate_screen);
 
     monitor_async_impl(config).await
 }
 
-/// Guard to ensure we leave alternate screen on drop
+/// RAII guard that automatically restores the terminal to its original state when dropped.
+/// This ensures the terminal is never left in alternate screen mode or with a hidden cursor,
+/// even if the program panics or exits unexpectedly.
+///
+/// RAII (Resource Acquisition Is Initialization) is a pattern where cleanup happens
+/// automatically when a value goes out of scope, similar to try/finally in other languages.
 struct CleanupGuard {
     use_alternate_screen: bool,
 }
@@ -134,10 +145,19 @@ impl CleanupGuard {
     }
 }
 
+// The Drop trait is Rust's destructor mechanism. This code runs automatically
+// when the CleanupGuard instance is destroyed (goes out of scope).
 impl Drop for CleanupGuard {
     fn drop(&mut self) {
         if self.use_alternate_screen {
             let mut stdout_handle = stdout();
+            // Restore the terminal to its original state:
+            // - LeaveAlternateScreen: Switch back to the main terminal buffer
+            // - Show: Make the cursor visible again
+            // We use `let _ =` to explicitly ignore errors because:
+            // 1. We're in a destructor, so we can't propagate errors
+            // 2. We want cleanup to be best-effort
+            // 3. The terminal will reset when the process ends anyway
             let _ = execute!(stdout_handle, LeaveAlternateScreen, Show);
             let _ = stdout_handle.flush();
         }

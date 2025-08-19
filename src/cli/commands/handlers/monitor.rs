@@ -27,29 +27,45 @@ pub async fn monitor(config: MonitorConfig<'_>) -> Result<()> {
     use crate::cache::DeviceCache;
     use crate::output::{print_error, print_info, print_json, print_warning};
 
-    // Set up alternate screen for text mode to prevent flicker
+    // Set up alternate screen for text mode to prevent flicker.
+    // The alternate screen is a separate buffer that doesn't affect the main terminal scrollback.
     let use_alternate_screen = matches!(config.format, OutputFormat::Text);
 
     if use_alternate_screen {
         let mut stdout_handle = stdout();
+        // EnterAlternateScreen: Switch to a separate screen buffer (like vim or less does)
+        // Hide: Hide the cursor for cleaner display during updates
         execute!(stdout_handle, EnterAlternateScreen, Hide)?;
     }
 
-    // Ensure we clean up on exit
+    // Define a local RAII guard that will automatically restore the terminal when dropped.
+    // RAII (Resource Acquisition Is Initialization) ensures cleanup happens automatically.
     struct CleanupGuard {
         use_alternate_screen: bool,
     }
 
+    // The Drop trait is Rust's destructor mechanism. This code runs automatically
+    // when the CleanupGuard instance is destroyed (goes out of scope).
     impl Drop for CleanupGuard {
         fn drop(&mut self) {
             if self.use_alternate_screen {
                 let mut stdout_handle = stdout();
+                // Restore the terminal to its original state:
+                // - LeaveAlternateScreen: Switch back to the main terminal buffer
+                // - Show: Make the cursor visible again
+                // We use `let _ =` to explicitly ignore errors because:
+                // 1. We're in a destructor, so we can't propagate errors
+                // 2. We want cleanup to be best-effort
+                // 3. The terminal will reset when the process ends anyway
                 let _ = execute!(stdout_handle, LeaveAlternateScreen, Show);
                 let _ = stdout_handle.flush();
             }
         }
     }
 
+    // Create the guard. The underscore prefix (_cleanup) tells Rust we won't use this variable,
+    // but we want to keep it alive until the function ends.
+    // This guard ensures the terminal is restored even if the function panics or returns early.
     let _cleanup = CleanupGuard {
         use_alternate_screen,
     };
