@@ -1,5 +1,11 @@
 use crate::cli::commands::{DeviceFilterArg, OutputFormat};
 use anyhow::Result;
+use crossterm::{
+    cursor::{Hide, MoveTo, Show},
+    execute,
+    terminal::{Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen},
+};
+use std::io::{stdout, Write as IoWrite};
 use std::path::Path;
 use std::time::Duration;
 use tabled::Tabled;
@@ -70,6 +76,33 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
         print_json, print_success, print_warning, ColoredTemperature,
     };
     use std::collections::HashMap;
+
+    // Set up alternate screen for watch mode to prevent flicker
+    let use_alternate_screen = args.watch && matches!(args.format, OutputFormat::Text);
+
+    if use_alternate_screen {
+        let mut stdout_handle = stdout();
+        execute!(stdout_handle, EnterAlternateScreen, Hide)?;
+    }
+
+    // Ensure we clean up on exit
+    struct CleanupGuard {
+        use_alternate_screen: bool,
+    }
+
+    impl Drop for CleanupGuard {
+        fn drop(&mut self) {
+            if self.use_alternate_screen {
+                let mut stdout_handle = stdout();
+                let _ = execute!(stdout_handle, LeaveAlternateScreen, Show);
+                let _ = stdout_handle.flush();
+            }
+        }
+    }
+
+    let _cleanup = CleanupGuard {
+        use_alternate_screen,
+    };
 
     // Track previous hashrates for drop detection
     let mut previous_hashrates: HashMap<String, f64> = HashMap::new();
@@ -367,10 +400,14 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
                 }
             }
             OutputFormat::Text => {
-                if args.watch {
-                    // Clear screen for watch mode
-                    print!("\x1B[2J\x1B[1;1H");
-                }
+                use std::fmt::Write as FmtWrite;
+
+                // Buffer all output if in watch mode to reduce flickering
+                let mut output_buffer = if args.watch {
+                    Some(String::new())
+                } else {
+                    None
+                };
 
                 if args.no_stats {
                     // Basic table without stats
@@ -396,7 +433,11 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
                         })
                         .collect();
 
-                    println!("{}", format_table(table_rows, args.color));
+                    if let Some(ref mut buffer) = output_buffer {
+                        writeln!(buffer, "{}", format_table(table_rows, args.color))?;
+                    } else {
+                        println!("{}", format_table(table_rows, args.color));
+                    }
                 } else {
                     // Full table with stats
                     let table_rows: Vec<DeviceTableRow> = devices
@@ -437,7 +478,11 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
                         })
                         .collect();
 
-                    println!("{}", format_table(table_rows, args.color));
+                    if let Some(ref mut buffer) = output_buffer {
+                        writeln!(buffer, "{}", format_table(table_rows, args.color))?;
+                    } else {
+                        println!("{}", format_table(table_rows, args.color));
+                    }
 
                     // Show summary if we have stats for multiple devices
                     let online_stats: Vec<_> =
@@ -451,37 +496,94 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
                             .sum::<f64>()
                             / online_stats.len() as f64;
 
-                        println!();
-                        print_info(
-                            &format!(
-                                "Summary: {} devices, {} total, {:.1}W total, {:.1}°C avg",
+                        if let Some(ref mut buffer) = output_buffer {
+                            writeln!(buffer)?;
+                            writeln!(
+                                buffer,
+                                "ℹ Summary: {} devices, {} total, {:.1}W total, {:.1}°C avg",
                                 online_stats.len(),
                                 format_hashrate(total_hashrate),
                                 total_power,
                                 avg_temp
-                            ),
-                            args.color,
-                        );
+                            )?;
+                        } else {
+                            println!();
+                            print_info(
+                                &format!(
+                                    "Summary: {} devices, {} total, {:.1}W total, {:.1}°C avg",
+                                    online_stats.len(),
+                                    format_hashrate(total_hashrate),
+                                    total_power,
+                                    avg_temp
+                                ),
+                                args.color,
+                            );
+                        }
                     }
                 }
 
                 // Show alerts if any
                 if !alerts.is_empty() {
-                    println!();
-                    println!("🚨 ALERTS:");
-                    for alert in &alerts {
-                        print_warning(alert, args.color);
+                    if let Some(ref mut buffer) = output_buffer {
+                        writeln!(buffer)?;
+                        writeln!(buffer, "🚨 ALERTS:")?;
+                        for alert in &alerts {
+                            writeln!(buffer, "⚠️ {}", alert)?;
+                        }
+                    } else {
+                        println!();
+                        println!("🚨 ALERTS:");
+                        for alert in &alerts {
+                            print_warning(alert, args.color);
+                        }
                     }
                 }
 
                 // Show type summaries if requested
                 if args.type_summary {
                     if args.no_stats {
-                        println!();
-                        print_info(
-                            "Type summaries require statistics (remove --no-stats flag)",
-                            args.color,
-                        );
+                        if let Some(ref mut buffer) = output_buffer {
+                            writeln!(buffer)?;
+                            writeln!(
+                                buffer,
+                                "ℹ Type summaries require statistics (remove --no-stats flag)"
+                            )?;
+                        } else {
+                            println!();
+                            print_info(
+                                "Type summaries require statistics (remove --no-stats flag)",
+                                args.color,
+                            );
+                        }
+                    } else if let Some(ref mut buffer) = output_buffer {
+                        writeln!(buffer)?;
+                        writeln!(buffer, "📊 Device Type Summaries:")?;
+                        writeln!(buffer, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")?;
+
+                        let type_summaries = cache.get_type_summaries();
+                        if type_summaries.is_empty() {
+                            writeln!(buffer, "   No devices found")?;
+                        } else {
+                            for summary in type_summaries {
+                                let status_indicator = if summary.devices_online > 0 {
+                                    "🟢"
+                                } else {
+                                    "🔴"
+                                };
+
+                                writeln!(
+                                    buffer,
+                                    "{} {} ({}/{} online) | {} | {:.1}W | Avg: {:.1}°C",
+                                    status_indicator,
+                                    summary.type_name,
+                                    summary.devices_online,
+                                    summary.total_devices,
+                                    format_hashrate(summary.total_hashrate_mhs),
+                                    summary.total_power_watts,
+                                    summary.average_temperature
+                                )?;
+                            }
+                        }
                     } else {
                         println!();
                         println!("📊 Device Type Summaries:");
@@ -513,9 +615,10 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
                     }
                 }
 
-                print_info(
-                    &format!(
-                        "Total: {} device(s) {}{}",
+                if let Some(ref mut buffer) = output_buffer {
+                    writeln!(
+                        buffer,
+                        "ℹ Total: {} device(s) {}{}",
                         devices.len(),
                         if args.all { "" } else { "(online only)" },
                         if alert_count > 0 {
@@ -523,9 +626,34 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
                         } else {
                             String::new()
                         }
-                    ),
-                    args.color,
-                );
+                    )?;
+                } else {
+                    print_info(
+                        &format!(
+                            "Total: {} device(s) {}{}",
+                            devices.len(),
+                            if args.all { "" } else { "(online only)" },
+                            if alert_count > 0 {
+                                format!(" | {} total alerts this session", alert_count)
+                            } else {
+                                String::new()
+                            }
+                        ),
+                        args.color,
+                    );
+                }
+
+                // If in watch mode, write buffered output to screen all at once
+                if let Some(buffer) = output_buffer {
+                    let mut stdout_handle = stdout();
+                    execute!(
+                        stdout_handle,
+                        MoveTo(0, 0),
+                        Clear(ClearType::FromCursorDown)
+                    )?;
+                    write!(stdout_handle, "{}", buffer)?;
+                    stdout_handle.flush()?;
+                }
             }
         }
 
