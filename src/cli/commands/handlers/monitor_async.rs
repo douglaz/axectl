@@ -15,7 +15,7 @@ use crossterm::{
 };
 use futures::future::join_all;
 use std::collections::HashMap;
-use std::io::{stdout, Write};
+use std::io::{stdout, Write as IoWrite};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
@@ -642,9 +642,9 @@ async fn display_results(
             print_json(&output, true)?;
         }
         OutputFormat::Text => {
-            // Use crossterm to clear and move cursor instead of ANSI codes
-            let mut stdout_handle = stdout();
-            execute!(stdout_handle, MoveTo(0, 0), Clear(ClearType::All))?;
+            // Buffer all output to reduce flickering
+            let mut output_buffer = String::new();
+            use std::fmt::Write as FmtWrite;
 
             if config.no_stats {
                 // Basic table without stats
@@ -659,7 +659,11 @@ async fn display_results(
                     })
                     .collect();
 
-                println!("{}", format_table(table_rows, config.color));
+                writeln!(
+                    &mut output_buffer,
+                    "{}",
+                    format_table(table_rows, config.color)
+                )?;
             } else {
                 // Full table with stats
                 let table_rows: Vec<MonitorTableRow> = devices
@@ -699,7 +703,11 @@ async fn display_results(
                     })
                     .collect();
 
-                println!("{}", format_table(table_rows, config.color));
+                writeln!(
+                    &mut output_buffer,
+                    "{}",
+                    format_table(table_rows, config.color)
+                )?;
 
                 // Show summary
                 let online_stats: Vec<_> =
@@ -714,39 +722,37 @@ async fn display_results(
                         .sum::<f64>()
                         / online_stats.len() as f64;
 
-                    println!();
-                    print_info(
-                        &format!(
-                            "Summary: {count} devices, {hashrate} total, {power:.1}W total, {temp:.1}°C avg",
-                            count = online_stats.len(),
-                            hashrate = format_hashrate(total_hashrate),
-                            power = total_power,
-                            temp = avg_temp
-                        ),
-                        config.color,
-                    );
+                    writeln!(&mut output_buffer)?;
+                    writeln!(
+                        &mut output_buffer,
+                        "ℹ Summary: {count} devices, {hashrate} total, {power:.1}W total, {temp:.1}°C avg",
+                        count = online_stats.len(),
+                        hashrate = format_hashrate(total_hashrate),
+                        power = total_power,
+                        temp = avg_temp
+                    )?;
                 }
             }
 
             // Show alerts if any
             if !alerts.is_empty() {
-                println!();
-                println!("🚨 ALERTS:");
+                writeln!(&mut output_buffer)?;
+                writeln!(&mut output_buffer, "🚨 ALERTS:")?;
                 for alert in alerts {
-                    print_warning(&alert.message, config.color);
+                    writeln!(&mut output_buffer, "⚠️ {}", alert.message)?;
                 }
             }
 
             // Show type summaries if requested
             if config.type_summary && !config.no_stats {
-                println!();
-                println!("📊 Device Type Summaries:");
-                println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                writeln!(&mut output_buffer)?;
+                writeln!(&mut output_buffer, "📊 Device Type Summaries:")?;
+                writeln!(&mut output_buffer, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")?;
 
                 let cache_guard = cache.read().await;
                 let type_summaries = cache_guard.get_type_summaries();
                 if type_summaries.is_empty() {
-                    println!("   No devices found");
+                    writeln!(&mut output_buffer, "   No devices found")?;
                 } else {
                     for summary in type_summaries {
                         let status_indicator = if summary.devices_online > 0 {
@@ -754,7 +760,8 @@ async fn display_results(
                         } else {
                             "🔴"
                         };
-                        println!(
+                        writeln!(
+                            &mut output_buffer,
                             "{} {} ({}/{} online) | {} | {:.1}W | Avg: {:.1}°C",
                             status_indicator,
                             summary.type_name,
@@ -763,7 +770,7 @@ async fn display_results(
                             format_hashrate(summary.total_hashrate_mhs),
                             summary.total_power_watts,
                             summary.average_temperature
-                        );
+                        )?;
                     }
                 }
             }
@@ -778,15 +785,23 @@ async fn display_results(
                 ""
             };
 
-            print_info(
-                &format!(
-                    "Updating in {interval}s... (Ctrl+C to stop) | {count} total alerts{status}",
-                    interval = config.interval,
-                    count = state_guard.alert_count,
-                    status = discovery_status
-                ),
-                config.color,
-            );
+            writeln!(
+                &mut output_buffer,
+                "ℹ Updating in {interval}s... (Ctrl+C to stop) | {count} total alerts{status}",
+                interval = config.interval,
+                count = state_guard.alert_count,
+                status = discovery_status
+            )?;
+
+            // Now write everything to screen at once
+            let mut stdout_handle = stdout();
+            execute!(
+                stdout_handle,
+                MoveTo(0, 0),
+                Clear(ClearType::FromCursorDown)
+            )?;
+            write!(stdout_handle, "{}", output_buffer)?;
+            stdout_handle.flush()?;
         }
     }
 

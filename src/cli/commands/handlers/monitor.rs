@@ -6,7 +6,7 @@ use crossterm::{
     terminal::{Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use std::collections::HashMap;
-use std::io::{stdout, Write};
+use std::io::{stdout, Write as IoWrite};
 use std::path::Path;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -270,11 +270,11 @@ pub async fn monitor(config: MonitorConfig<'_>) -> Result<()> {
                 use crate::output::{
                     format_hashrate, format_power, format_table, format_uptime, ColoredTemperature,
                 };
+                use std::fmt::Write as FmtWrite;
                 use tabled::Tabled;
 
-                // Use crossterm to clear and move cursor instead of ANSI codes
-                let mut stdout_handle = stdout();
-                execute!(stdout_handle, MoveTo(0, 0), Clear(ClearType::All))?;
+                // Buffer all output to reduce flickering
+                let mut output_buffer = String::new();
 
                 #[derive(Tabled)]
                 struct MonitorTableRow {
@@ -326,7 +326,11 @@ pub async fn monitor(config: MonitorConfig<'_>) -> Result<()> {
                     })
                     .collect();
 
-                println!("{}", format_table(table_rows, config.color));
+                writeln!(
+                    &mut output_buffer,
+                    "{}",
+                    format_table(table_rows, config.color)
+                )?;
 
                 // Show summary
                 let online_stats: Vec<_> = device_stats.iter().filter_map(|s| s.as_ref()).collect();
@@ -339,38 +343,36 @@ pub async fn monitor(config: MonitorConfig<'_>) -> Result<()> {
                         .sum::<f64>()
                         / online_stats.len() as f64;
 
-                    println!();
-                    print_info(
-                        &format!(
-                            "Summary: {} devices, {} total, {:.1}W total, {:.1}°C avg",
-                            online_stats.len(),
-                            format_hashrate(total_hashrate),
-                            total_power,
-                            avg_temp
-                        ),
-                        config.color,
-                    );
+                    writeln!(&mut output_buffer)?;
+                    writeln!(
+                        &mut output_buffer,
+                        "ℹ Summary: {} devices, {} total, {:.1}W total, {:.1}°C avg",
+                        online_stats.len(),
+                        format_hashrate(total_hashrate),
+                        total_power,
+                        avg_temp
+                    )?;
                 }
 
                 // Show alerts if any
                 if !alerts.is_empty() {
-                    println!();
-                    println!("🚨 ALERTS:");
+                    writeln!(&mut output_buffer)?;
+                    writeln!(&mut output_buffer, "🚨 ALERTS:")?;
                     for alert in &alerts {
-                        print_warning(alert, config.color);
+                        writeln!(&mut output_buffer, "⚠️ {}", alert)?;
                     }
                 }
 
                 // Show type summaries if requested
                 if config.type_summary {
-                    println!();
-                    println!("📊 Device Type Summaries:");
-                    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                    writeln!(&mut output_buffer)?;
+                    writeln!(&mut output_buffer, "📊 Device Type Summaries:")?;
+                    writeln!(&mut output_buffer, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")?;
 
                     let type_summaries = cache.get_type_summaries();
                     {
                         if type_summaries.is_empty() {
-                            println!("   No devices found");
+                            writeln!(&mut output_buffer, "   No devices found")?;
                         } else {
                             for summary in type_summaries {
                                 let status_indicator = if summary.devices_online > 0 {
@@ -378,7 +380,8 @@ pub async fn monitor(config: MonitorConfig<'_>) -> Result<()> {
                                 } else {
                                     "🔴"
                                 };
-                                println!(
+                                writeln!(
+                                    &mut output_buffer,
                                     "{} {} ({}/{} online) | {} | {:.1}W | Avg: {:.1}°C",
                                     status_indicator,
                                     summary.type_name,
@@ -387,19 +390,27 @@ pub async fn monitor(config: MonitorConfig<'_>) -> Result<()> {
                                     format_hashrate(summary.total_hashrate_mhs),
                                     summary.total_power_watts,
                                     summary.average_temperature
-                                );
+                                )?;
                             }
                         }
                     }
                 }
 
-                print_info(
-                    &format!(
-                        "Updating in {}s... (Ctrl+C to stop) | {} total alerts",
-                        config.interval, alert_count
-                    ),
-                    config.color,
-                );
+                writeln!(
+                    &mut output_buffer,
+                    "ℹ Updating in {}s... (Ctrl+C to stop) | {} total alerts",
+                    config.interval, alert_count
+                )?;
+
+                // Now write everything to screen at once
+                let mut stdout_handle = stdout();
+                execute!(
+                    stdout_handle,
+                    MoveTo(0, 0),
+                    Clear(ClearType::FromCursorDown)
+                )?;
+                write!(stdout_handle, "{}", output_buffer)?;
+                stdout_handle.flush()?;
             }
         }
 
