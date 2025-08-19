@@ -555,63 +555,61 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
                                 args.color,
                             );
                         }
-                    } else {
-                        if let Some(ref mut buffer) = output_buffer {
-                            writeln!(buffer)?;
-                            writeln!(buffer, "📊 Device Type Summaries:")?;
-                            writeln!(buffer, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")?;
+                    } else if let Some(ref mut buffer) = output_buffer {
+                        writeln!(buffer)?;
+                        writeln!(buffer, "📊 Device Type Summaries:")?;
+                        writeln!(buffer, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")?;
 
-                            let type_summaries = cache.get_type_summaries();
-                            if type_summaries.is_empty() {
-                                writeln!(buffer, "   No devices found")?;
-                            } else {
-                                for summary in type_summaries {
-                                    let status_indicator = if summary.devices_online > 0 {
-                                        "🟢"
-                                    } else {
-                                        "🔴"
-                                    };
-
-                                    writeln!(
-                                        buffer,
-                                        "{} {} ({}/{} online) | {} | {:.1}W | Avg: {:.1}°C",
-                                        status_indicator,
-                                        summary.type_name,
-                                        summary.devices_online,
-                                        summary.total_devices,
-                                        format_hashrate(summary.total_hashrate_mhs),
-                                        summary.total_power_watts,
-                                        summary.average_temperature
-                                    )?;
-                                }
-                            }
+                        let type_summaries = cache.get_type_summaries();
+                        if type_summaries.is_empty() {
+                            writeln!(buffer, "   No devices found")?;
                         } else {
-                            println!();
-                            println!("📊 Device Type Summaries:");
-                            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                            for summary in type_summaries {
+                                let status_indicator = if summary.devices_online > 0 {
+                                    "🟢"
+                                } else {
+                                    "🔴"
+                                };
 
-                            let type_summaries = cache.get_type_summaries();
-                            if type_summaries.is_empty() {
-                                println!("   No devices found");
-                            } else {
-                                for summary in type_summaries {
-                                    let status_indicator = if summary.devices_online > 0 {
-                                        "🟢"
-                                    } else {
-                                        "🔴"
-                                    };
+                                writeln!(
+                                    buffer,
+                                    "{} {} ({}/{} online) | {} | {:.1}W | Avg: {:.1}°C",
+                                    status_indicator,
+                                    summary.type_name,
+                                    summary.devices_online,
+                                    summary.total_devices,
+                                    format_hashrate(summary.total_hashrate_mhs),
+                                    summary.total_power_watts,
+                                    summary.average_temperature
+                                )?;
+                            }
+                        }
+                    } else {
+                        println!();
+                        println!("📊 Device Type Summaries:");
+                        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
-                                    println!(
-                                        "{} {} ({}/{} online) | {} | {:.1}W | Avg: {:.1}°C",
-                                        status_indicator,
-                                        summary.type_name,
-                                        summary.devices_online,
-                                        summary.total_devices,
-                                        format_hashrate(summary.total_hashrate_mhs),
-                                        summary.total_power_watts,
-                                        summary.average_temperature
-                                    );
-                                }
+                        let type_summaries = cache.get_type_summaries();
+                        if type_summaries.is_empty() {
+                            println!("   No devices found");
+                        } else {
+                            for summary in type_summaries {
+                                let status_indicator = if summary.devices_online > 0 {
+                                    "🟢"
+                                } else {
+                                    "🔴"
+                                };
+
+                                println!(
+                                    "{} {} ({}/{} online) | {} | {:.1}W | Avg: {:.1}°C",
+                                    status_indicator,
+                                    summary.type_name,
+                                    summary.devices_online,
+                                    summary.total_devices,
+                                    format_hashrate(summary.total_hashrate_mhs),
+                                    summary.total_power_watts,
+                                    summary.average_temperature
+                                );
                             }
                         }
                     }
