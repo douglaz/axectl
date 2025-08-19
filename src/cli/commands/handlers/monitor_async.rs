@@ -147,8 +147,8 @@ pub async fn monitor_async(config: AsyncMonitorConfig<'_>) -> Result<()> {
         if !cache_guard.is_empty() && matches!(config.format, OutputFormat::Text) {
             print_info(
                 &format!(
-                    "📦 Loaded {} device(s) from cache",
-                    cache_guard.device_count()
+                    "📦 Loaded {count} device(s) from cache",
+                    count = cache_guard.device_count()
                 ),
                 config.color,
             );
@@ -230,7 +230,7 @@ pub async fn monitor_async(config: AsyncMonitorConfig<'_>) -> Result<()> {
 
                             // Save cache
                             if let Err(e) = cache_guard.save(&cache_path_buf) {
-                                tracing::warn!("Failed to save cache after discovery: {}", e);
+                                tracing::warn!("Failed to save cache after discovery: {e}");
                             }
                         }
 
@@ -254,7 +254,7 @@ pub async fn monitor_async(config: AsyncMonitorConfig<'_>) -> Result<()> {
                         }
                     }
                     Err(e) => {
-                        tracing::warn!("Background discovery failed: {}", e);
+                        tracing::warn!("Background discovery failed: {e}");
                         let mut state_guard = state_clone.write().await;
                         state_guard.discovery_active = false;
                     }
@@ -289,8 +289,8 @@ pub async fn monitor_async(config: AsyncMonitorConfig<'_>) -> Result<()> {
                         for device in devices {
                             if matches!(config.format, OutputFormat::Text) {
                                 print_success(
-                                    &format!("🆕 New device discovered: {} ({})",
-                                        device.name, device.ip_address),
+                                    &format!("🆕 New device discovered: {name} ({ip})",
+                                        name = device.name, ip = device.ip_address),
                                     config.color
                                 );
                             }
@@ -300,7 +300,7 @@ pub async fn monitor_async(config: AsyncMonitorConfig<'_>) -> Result<()> {
                     MonitorMessage::DiscoveryComplete(count) => {
                         if matches!(config.format, OutputFormat::Text) {
                             print_info(
-                                &format!("✓ Background discovery complete, {} total devices found", count),
+                                &format!("✓ Background discovery complete, {count} total devices found"),
                                 config.color
                             );
                         }
@@ -338,7 +338,7 @@ async fn update_and_display(
     if devices.is_empty() {
         if matches!(config.format, OutputFormat::Text) {
             if let Some(ref type_filter) = config.type_filter {
-                print_warning(&format!("No {} devices found", type_filter), config.color);
+                print_warning(&format!("No {type_filter} devices found"), config.color);
             } else if config.all {
                 print_warning("No devices found", config.color);
             } else {
@@ -348,8 +348,8 @@ async fn update_and_display(
 
             print_info(
                 &format!(
-                    "Run 'axectl discover --cache-dir {}' to find devices",
-                    cache_path.display()
+                    "Run 'axectl discover --cache-dir {path}' to find devices",
+                    path = cache_path.display()
                 ),
                 config.color,
             );
@@ -394,8 +394,8 @@ async fn update_and_display(
                                 alerts.push(Alert {
                                     timestamp: Utc::now(),
                                     message: format!(
-                                        "🌡️ {} temperature alert: {:.1}°C > {:.1}°C",
-                                        device.name, stats.temperature_celsius, temp_threshold
+                                        "🌡️ {name} temperature alert: {temp:.1}°C > {threshold:.1}°C",
+                                        name = device.name, temp = stats.temperature_celsius, threshold = temp_threshold
                                     ),
                                     device_ip: ip.clone(),
                                 });
@@ -413,11 +413,11 @@ async fn update_and_display(
                                     alerts.push(Alert {
                                         timestamp: Utc::now(),
                                         message: format!(
-                                            "📉 {} hashrate drop: {:.1}% ({} -> {})",
-                                            device.name,
-                                            drop_percent,
-                                            format_hashrate(*previous_hashrate),
-                                            format_hashrate(stats.hashrate_mhs)
+                                            "📉 {name} hashrate drop: {drop:.1}% ({prev} -> {curr})",
+                                            name = device.name,
+                                            drop = drop_percent,
+                                            prev = format_hashrate(*previous_hashrate),
+                                            curr = format_hashrate(stats.hashrate_mhs)
                                         ),
                                         device_ip: ip.clone(),
                                     });
@@ -441,14 +441,14 @@ async fn update_and_display(
                     device_stats.push(Some(stats));
                 }
                 Ok(Err(e)) => {
-                    tracing::warn!("Failed to collect stats from {}: {}", ip, e);
+                    tracing::warn!("Failed to collect stats from {ip}: {e}");
 
                     // Mark device as offline
                     if let Some(device) = state_guard.devices.get_mut(&ip) {
                         device.status = DeviceStatus::Offline;
                         alerts.push(Alert {
                             timestamp: Utc::now(),
-                            message: format!("🔌 {} went offline", device.name),
+                            message: format!("🔌 {name} went offline", name = device.name),
                             device_ip: ip.clone(),
                         });
                     }
@@ -457,14 +457,14 @@ async fn update_and_display(
                     device_stats.push(None);
                 }
                 Err(_) => {
-                    tracing::warn!("Failed to collect stats from {} (timeout)", ip);
+                    tracing::warn!("Failed to collect stats from {ip} (timeout)");
 
                     // Mark device as offline
                     if let Some(device) = state_guard.devices.get_mut(&ip) {
                         device.status = DeviceStatus::Offline;
                         alerts.push(Alert {
                             timestamp: Utc::now(),
-                            message: format!("🔌 {} went offline", device.name),
+                            message: format!("🔌 {name} went offline", name = device.name),
                             device_ip: ip.clone(),
                         });
                     }
@@ -481,7 +481,7 @@ async fn update_and_display(
 
         // Save cache
         if let Err(e) = cache_guard.save(cache_path) {
-            tracing::warn!("Failed to save cache: {}", e);
+            tracing::warn!("Failed to save cache: {e}");
         }
     }
 
@@ -506,16 +506,18 @@ async fn display_results(
             let devices_with_stats: Vec<serde_json::Value> = if config.no_stats {
                 devices
                     .iter()
-                    .map(|d| serde_json::to_value(d).unwrap())
+                    .map(|d| serde_json::to_value(d).expect("Device should be serializable"))
                     .collect()
             } else {
                 devices
                     .iter()
                     .zip(device_stats.iter())
                     .map(|(device, stats)| {
-                        let mut device_json = serde_json::to_value(device).unwrap();
+                        let mut device_json =
+                            serde_json::to_value(device).expect("Device should be serializable");
                         if let Some(stats) = stats {
-                            device_json["stats"] = serde_json::to_value(stats).unwrap();
+                            device_json["stats"] = serde_json::to_value(stats)
+                                .expect("DeviceStats should be serializable");
                         }
                         device_json
                     })
@@ -607,7 +609,7 @@ async fn display_results(
                         name: device.name.clone(),
                         ip_address: device.ip_address.clone(),
                         device_type: device.device_type.as_str().to_string(),
-                        status: format!("{:?}", device.status),
+                        status: format!("{status:?}", status = device.status),
                         last_seen: format_last_seen(device.last_seen),
                     })
                     .collect();
@@ -623,7 +625,7 @@ async fn display_results(
                                 name: device.name.clone(),
                                 ip_address: device.ip_address.clone(),
                                 device_type: device.device_type.as_str().to_string(),
-                                status: format!("{:?}", device.status),
+                                status: format!("{status:?}", status = device.status),
                                 hashrate: format_hashrate(stats.hashrate_mhs),
                                 temperature: ColoredTemperature::new(
                                     stats.temperature_celsius,
@@ -631,7 +633,7 @@ async fn display_results(
                                 )
                                 .to_string(),
                                 power: format_power(stats.power_watts),
-                                fan_speed: format!("{}", stats.fan_speed_rpm),
+                                fan_speed: format!("{rpm}", rpm = stats.fan_speed_rpm),
                                 uptime: format_uptime(stats.uptime_seconds),
                                 pool: stats.pool_url.as_deref().unwrap_or("-").to_string(),
                             }
@@ -640,7 +642,7 @@ async fn display_results(
                                 name: device.name.clone(),
                                 ip_address: device.ip_address.clone(),
                                 device_type: device.device_type.as_str().to_string(),
-                                status: format!("{:?}", device.status),
+                                status: format!("{status:?}", status = device.status),
                                 hashrate: "-".to_string(),
                                 temperature: "-".to_string(),
                                 power: "-".to_string(),
@@ -670,11 +672,11 @@ async fn display_results(
                     println!();
                     print_info(
                         &format!(
-                            "Summary: {} devices, {} total, {:.1}W total, {:.1}°C avg",
-                            online_stats.len(),
-                            format_hashrate(total_hashrate),
-                            total_power,
-                            avg_temp
+                            "Summary: {count} devices, {hashrate} total, {power:.1}W total, {temp:.1}°C avg",
+                            count = online_stats.len(),
+                            hashrate = format_hashrate(total_hashrate),
+                            power = total_power,
+                            temp = avg_temp
                         ),
                         config.color,
                     );
@@ -726,15 +728,17 @@ async fn display_results(
                 " | 🔍 Discovery active"
             } else if let Some(last) = state_guard.last_discovery {
                 let mins_ago = (Utc::now() - last).num_minutes();
-                &format!(" | Last discovery: {}m ago", mins_ago)
+                &format!(" | Last discovery: {mins_ago}m ago")
             } else {
                 ""
             };
 
             print_info(
                 &format!(
-                    "Updating in {}s... (Ctrl+C to stop) | {} total alerts{}",
-                    config.interval, state_guard.alert_count, discovery_status
+                    "Updating in {interval}s... (Ctrl+C to stop) | {count} total alerts{status}",
+                    interval = config.interval,
+                    count = state_guard.alert_count,
+                    status = discovery_status
                 ),
                 config.color,
             );
@@ -755,10 +759,10 @@ fn format_last_seen(last_seen: DateTime<Utc>) -> String {
     if duration.num_seconds() < 60 {
         "Just now".to_string()
     } else if duration.num_minutes() < 60 {
-        format!("{}m ago", duration.num_minutes())
+        format!("{mins}m ago", mins = duration.num_minutes())
     } else if duration.num_hours() < 24 {
-        format!("{}h ago", duration.num_hours())
+        format!("{hours}h ago", hours = duration.num_hours())
     } else {
-        format!("{}d ago", duration.num_days())
+        format!("{days}d ago", days = duration.num_days())
     }
 }
