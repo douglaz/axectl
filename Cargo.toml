@@ -18,7 +18,7 @@ futures = "0.3"
 clap = { version = "4", features = ["derive"] }
 tabled = { version = "0.20", features = ["std", "ansi"] }
 colored = "3"
-strum = { version = "0.26", features = ["derive"] }
+strum = { version = "0.27", features = ["derive"] }
 crossterm = "0.28"
 
 # Network
