@@ -32,14 +32,17 @@ jobs:
           ~/.cargo/git
         key: audit-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
 
-    - name: Install cargo-audit
-      run: cargo install cargo-audit
+    - name: Install Nix
+      uses: cachix/install-nix-action@v31
+      with:
+        extra_nix_config: |
+          experimental-features = nix-command flakes
 
     - name: Run cargo audit
-      run: cargo audit
+      run: nix run nixpkgs#cargo-audit -- audit
 
     - name: Run cargo audit (JSON output)
-      run: cargo audit --json > audit-results.json
+      run: nix run nixpkgs#cargo-audit -- audit --json > audit-results.json
       continue-on-error: true
 
     - name: Upload audit results
@@ -68,11 +71,14 @@ jobs:
           ~/.cargo/git
         key: supply-chain-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
 
-    - name: Install cargo-deny
-      run: cargo install cargo-deny
+    - name: Install Nix
+      uses: cachix/install-nix-action@v31
+      with:
+        extra_nix_config: |
+          experimental-features = nix-command flakes
 
     - name: Run cargo deny
-      run: cargo deny check
+      run: nix run nixpkgs#cargo-deny -- check
 
   codeql-analysis:
     name: CodeQL Analysis
