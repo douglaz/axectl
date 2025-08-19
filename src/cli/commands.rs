@@ -155,6 +155,30 @@ pub enum Commands {
         /// Show per-type summaries
         #[arg(long)]
         type_summary: bool,
+
+        /// Include offline devices
+        #[arg(long)]
+        all: bool,
+
+        /// Skip fetching live statistics (faster)
+        #[arg(long)]
+        no_stats: bool,
+
+        /// Enable background network discovery
+        #[arg(long)]
+        discover: bool,
+
+        /// Discovery interval in seconds (with --discover)
+        #[arg(long, default_value = "60")]
+        discover_interval: u64,
+
+        /// Network range to scan (auto-detected if not specified, only with --discover)
+        #[arg(long)]
+        network: Option<String>,
+
+        /// Skip mDNS discovery (only with --discover)
+        #[arg(long)]
+        no_mdns: bool,
     },
 
     /// Bulk operations on groups of devices
@@ -379,8 +403,14 @@ impl Cli {
                 hashrate_alert,
                 device_type,
                 type_summary,
+                all,
+                no_stats,
+                discover,
+                discover_interval,
+                network,
+                no_mdns,
             } => {
-                handlers::monitor(handlers::monitor::MonitorConfig {
+                handlers::monitor_async(handlers::monitor_async::AsyncMonitorConfig {
                     interval,
                     temp_alert,
                     hashrate_alert,
@@ -389,6 +419,12 @@ impl Cli {
                     format: self.format,
                     color: !self.no_color,
                     cache_dir: self.cache_dir.as_deref(),
+                    all,
+                    no_stats,
+                    discover,
+                    discover_interval,
+                    network,
+                    no_mdns,
                 })
                 .await
             }
