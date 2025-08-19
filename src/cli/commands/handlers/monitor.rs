@@ -1,6 +1,12 @@
 use crate::cli::commands::{DeviceFilterArg, OutputFormat};
 use anyhow::Result;
+use crossterm::{
+    cursor::{Hide, MoveTo, Show},
+    execute,
+    terminal::{Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen},
+};
 use std::collections::HashMap;
+use std::io::{stdout, Write};
 use std::path::Path;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -20,6 +26,33 @@ pub async fn monitor(config: MonitorConfig<'_>) -> Result<()> {
     use crate::api::{DeviceStatus, SwarmSummary};
     use crate::cache::DeviceCache;
     use crate::output::{print_error, print_info, print_json, print_warning};
+
+    // Set up alternate screen for text mode to prevent flicker
+    let use_alternate_screen = matches!(config.format, OutputFormat::Text);
+
+    if use_alternate_screen {
+        let mut stdout_handle = stdout();
+        execute!(stdout_handle, EnterAlternateScreen, Hide)?;
+    }
+
+    // Ensure we clean up on exit
+    struct CleanupGuard {
+        use_alternate_screen: bool,
+    }
+
+    impl Drop for CleanupGuard {
+        fn drop(&mut self) {
+            if self.use_alternate_screen {
+                let mut stdout_handle = stdout();
+                let _ = execute!(stdout_handle, LeaveAlternateScreen, Show);
+                let _ = stdout_handle.flush();
+            }
+        }
+    }
+
+    let _cleanup = CleanupGuard {
+        use_alternate_screen,
+    };
 
     // Require cache_dir for monitor command
     let cache_path = match config.cache_dir {
@@ -239,8 +272,9 @@ pub async fn monitor(config: MonitorConfig<'_>) -> Result<()> {
                 };
                 use tabled::Tabled;
 
-                // Clear screen for text mode
-                print!("\x1B[2J\x1B[1;1H");
+                // Use crossterm to clear and move cursor instead of ANSI codes
+                let mut stdout_handle = stdout();
+                execute!(stdout_handle, MoveTo(0, 0), Clear(ClearType::All))?;
 
                 #[derive(Tabled)]
                 struct MonitorTableRow {

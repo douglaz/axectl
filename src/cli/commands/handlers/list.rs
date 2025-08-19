@@ -1,5 +1,11 @@
 use crate::cli::commands::{DeviceFilterArg, OutputFormat};
 use anyhow::Result;
+use crossterm::{
+    cursor::{Hide, MoveTo, Show},
+    execute,
+    terminal::{Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen},
+};
+use std::io::{stdout, Write};
 use std::path::Path;
 use std::time::Duration;
 use tabled::Tabled;
@@ -70,6 +76,33 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
         print_json, print_success, print_warning, ColoredTemperature,
     };
     use std::collections::HashMap;
+
+    // Set up alternate screen for watch mode to prevent flicker
+    let use_alternate_screen = args.watch && matches!(args.format, OutputFormat::Text);
+
+    if use_alternate_screen {
+        let mut stdout_handle = stdout();
+        execute!(stdout_handle, EnterAlternateScreen, Hide)?;
+    }
+
+    // Ensure we clean up on exit
+    struct CleanupGuard {
+        use_alternate_screen: bool,
+    }
+
+    impl Drop for CleanupGuard {
+        fn drop(&mut self) {
+            if self.use_alternate_screen {
+                let mut stdout_handle = stdout();
+                let _ = execute!(stdout_handle, LeaveAlternateScreen, Show);
+                let _ = stdout_handle.flush();
+            }
+        }
+    }
+
+    let _cleanup = CleanupGuard {
+        use_alternate_screen,
+    };
 
     // Track previous hashrates for drop detection
     let mut previous_hashrates: HashMap<String, f64> = HashMap::new();
@@ -368,8 +401,9 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
             }
             OutputFormat::Text => {
                 if args.watch {
-                    // Clear screen for watch mode
-                    print!("\x1B[2J\x1B[1;1H");
+                    // Use crossterm to clear and move cursor instead of ANSI codes
+                    let mut stdout_handle = stdout();
+                    execute!(stdout_handle, MoveTo(0, 0), Clear(ClearType::All))?;
                 }
 
                 if args.no_stats {

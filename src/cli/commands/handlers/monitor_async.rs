@@ -8,8 +8,14 @@ use crate::output::{
 };
 use anyhow::Result;
 use chrono::{DateTime, Utc};
+use crossterm::{
+    cursor::{Hide, MoveTo, Show},
+    execute,
+    terminal::{Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen},
+};
 use futures::future::join_all;
 use std::collections::HashMap;
+use std::io::{stdout, Write};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
@@ -101,6 +107,44 @@ struct BasicMonitorTableRow {
 }
 
 pub async fn monitor_async(config: AsyncMonitorConfig<'_>) -> Result<()> {
+    // Set up alternate screen for text mode to prevent flicker
+    let use_alternate_screen = matches!(config.format, OutputFormat::Text);
+
+    if use_alternate_screen {
+        let mut stdout_handle = stdout();
+        execute!(stdout_handle, EnterAlternateScreen, Hide)?;
+    }
+
+    // Ensure we clean up on exit
+    let _cleanup = CleanupGuard::new(use_alternate_screen);
+
+    monitor_async_impl(config).await
+}
+
+/// Guard to ensure we leave alternate screen on drop
+struct CleanupGuard {
+    use_alternate_screen: bool,
+}
+
+impl CleanupGuard {
+    fn new(use_alternate_screen: bool) -> Self {
+        Self {
+            use_alternate_screen,
+        }
+    }
+}
+
+impl Drop for CleanupGuard {
+    fn drop(&mut self) {
+        if self.use_alternate_screen {
+            let mut stdout_handle = stdout();
+            let _ = execute!(stdout_handle, LeaveAlternateScreen, Show);
+            let _ = stdout_handle.flush();
+        }
+    }
+}
+
+async fn monitor_async_impl(config: AsyncMonitorConfig<'_>) -> Result<()> {
     // Require cache_dir for monitor command
     let cache_path = match config.cache_dir {
         Some(path) => path,
@@ -598,8 +642,9 @@ async fn display_results(
             print_json(&output, true)?;
         }
         OutputFormat::Text => {
-            // Clear screen for text mode
-            print!("\x1B[2J\x1B[1;1H");
+            // Use crossterm to clear and move cursor instead of ANSI codes
+            let mut stdout_handle = stdout();
+            execute!(stdout_handle, MoveTo(0, 0), Clear(ClearType::All))?;
 
             if config.no_stats {
                 // Basic table without stats
