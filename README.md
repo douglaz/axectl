@@ -47,25 +47,29 @@ chmod +x axectl
 git clone https://github.com/master/axectl.git
 cd axectl
 cargo build --release
-# Produces static binary: ./target/x86_64-unknown-linux-musl/release/axectl
+# Automatically builds static musl binary: ./target/x86_64-unknown-linux-musl/release/axectl
 ```
 
-#### Using Nix
+#### Using Nix (Recommended)
 ```bash
 # Run directly from GitHub
 nix run 'git+https://github.com/master/axectl.git'
 
-# Or build locally
+# Or build locally with proper toolchain
 git clone https://github.com/master/axectl.git
 cd axectl
-nix develop
-cargo build --release
+nix develop  # Enters environment with musl toolchain
+cargo build --release  # Builds static binary by default
 ```
 
 #### Development Builds
-For faster development iterations (non-static):
+For faster development iterations or dynamic linking:
 ```bash
-cargo build --target x86_64-unknown-linux-gnu  # Dynamic linking for faster builds
+# Override default musl target for dynamic linking
+cargo build --target x86_64-unknown-linux-gnu
+
+# Or temporarily override in environment
+CARGO_BUILD_TARGET=x86_64-unknown-linux-gnu cargo build
 ```
 
 ## 🎯 Why axectl?

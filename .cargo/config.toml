@@ -1,6 +1,6 @@
 [build]
-# Note: Target set by individual commands or CI workflows
-# Default musl target can be used with: cargo build --target x86_64-unknown-linux-musl
+# Default to musl target for static binary builds
+target = "x86_64-unknown-linux-musl"
 
 [target.x86_64-unknown-linux-musl]
 # Configure musl static linking
