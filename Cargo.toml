@@ -32,6 +32,7 @@ flume = "0.11"
 # Time and utilities
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }
+ctrlc = "3"
 
 
 # Logging
