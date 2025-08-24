@@ -99,48 +99,48 @@ jobs:
       run: cargo fmt --all -- --check
       if: matrix.rust == 'stable' && matrix.os == 'ubuntu-latest'
 
-    - name: Run clippy (override musl default)
+    - name: Run clippy
       run: |
         if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+          # Override musl default on Linux only
           cargo clippy --target x86_64-unknown-linux-gnu --all-targets --all-features -- -D warnings
-        elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-          cargo clippy --target x86_64-apple-darwin --all-targets --all-features -- -D warnings
-        elif [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-          cargo clippy --target x86_64-pc-windows-msvc --all-targets --all-features -- -D warnings
+        else
+          # macOS and Windows don't need override, musl config doesn't affect them
+          cargo clippy --all-targets --all-features -- -D warnings
         fi
       if: matrix.rust == 'stable'
       shell: bash
 
-    - name: Build (override musl default)
+    - name: Build
       run: |
         if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+          # Override musl default on Linux only
           cargo build --target x86_64-unknown-linux-gnu --verbose
-        elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-          cargo build --target x86_64-apple-darwin --verbose
-        elif [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-          cargo build --target x86_64-pc-windows-msvc --verbose
+        else
+          # macOS and Windows use native targets
+          cargo build --verbose
         fi
       shell: bash
 
-    - name: Run tests (override musl default)
+    - name: Run tests
       run: |
         if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+          # Override musl default on Linux only
           cargo test --target x86_64-unknown-linux-gnu --verbose
-        elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-          cargo test --target x86_64-apple-darwin --verbose
-        elif [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-          cargo test --target x86_64-pc-windows-msvc --verbose
+        else
+          # macOS and Windows use native targets
+          cargo test --verbose
         fi
       shell: bash
 
-    - name: Run tests with all features (override musl default)
+    - name: Run tests with all features
       run: |
         if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+          # Override musl default on Linux only
           cargo test --target x86_64-unknown-linux-gnu --all-features --verbose
-        elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-          cargo test --target x86_64-apple-darwin --all-features --verbose
-        elif [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-          cargo test --target x86_64-pc-windows-msvc --all-features --verbose
+        else
+          # macOS and Windows use native targets
+          cargo test --all-features --verbose
         fi
       shell: bash
 
