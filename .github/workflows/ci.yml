@@ -77,6 +77,11 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v5
 
+    - name: Remove musl config for non-Linux platforms
+      if: matrix.os != 'ubuntu-latest'
+      run: rm -f .cargo/config.toml
+      # The musl config should only apply to Linux builds
+
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@master
       with:
@@ -102,10 +107,10 @@ jobs:
     - name: Run clippy
       run: |
         if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
-          # Override musl default on Linux only
+          # Override musl default on Linux
           cargo clippy --target x86_64-unknown-linux-gnu --all-targets --all-features -- -D warnings
         else
-          # macOS and Windows don't need override, musl config doesn't affect them
+          # macOS and Windows use native targets (config removed)
           cargo clippy --all-targets --all-features -- -D warnings
         fi
       if: matrix.rust == 'stable'
@@ -114,10 +119,10 @@ jobs:
     - name: Build
       run: |
         if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
-          # Override musl default on Linux only
+          # Override musl default on Linux
           cargo build --target x86_64-unknown-linux-gnu --verbose
         else
-          # macOS and Windows use native targets
+          # macOS and Windows use native targets (config removed)
           cargo build --verbose
         fi
       shell: bash
@@ -125,10 +130,10 @@ jobs:
     - name: Run tests
       run: |
         if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
-          # Override musl default on Linux only
+          # Override musl default on Linux
           cargo test --target x86_64-unknown-linux-gnu --verbose
         else
-          # macOS and Windows use native targets
+          # macOS and Windows use native targets (config removed)
           cargo test --verbose
         fi
       shell: bash
@@ -136,10 +141,10 @@ jobs:
     - name: Run tests with all features
       run: |
         if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
-          # Override musl default on Linux only
+          # Override musl default on Linux
           cargo test --target x86_64-unknown-linux-gnu --all-features --verbose
         else
-          # macOS and Windows use native targets
+          # macOS and Windows use native targets (config removed)
           cargo test --all-features --verbose
         fi
       shell: bash
