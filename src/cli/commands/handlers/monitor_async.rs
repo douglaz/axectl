@@ -17,6 +17,7 @@ use futures::future::join_all;
 use std::collections::HashMap;
 use std::io::{stdout, Write as IoWrite};
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tabled::Tabled;
@@ -124,7 +125,15 @@ pub async fn monitor_async(config: AsyncMonitorConfig<'_>) -> Result<()> {
     // This guard ensures the terminal is restored even if the function panics or returns early.
     let _cleanup = CleanupGuard::new(use_alternate_screen);
 
-    monitor_async_impl(config).await
+    // Set up signal handling for graceful shutdown
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let shutdown_clone = shutdown.clone();
+
+    ctrlc::set_handler(move || {
+        shutdown_clone.store(true, Ordering::SeqCst);
+    })?;
+
+    monitor_async_impl(config, shutdown).await
 }
 
 /// RAII guard that automatically restores the terminal to its original state when dropped.
@@ -164,7 +173,10 @@ impl Drop for CleanupGuard {
     }
 }
 
-async fn monitor_async_impl(config: AsyncMonitorConfig<'_>) -> Result<()> {
+async fn monitor_async_impl(
+    config: AsyncMonitorConfig<'_>,
+    shutdown: Arc<AtomicBool>,
+) -> Result<()> {
     // Require cache_dir for monitor command
     let cache_path = match config.cache_dir {
         Some(path) => path,
@@ -252,12 +264,18 @@ async fn monitor_async_impl(config: AsyncMonitorConfig<'_>) -> Result<()> {
         let discover_interval = config.discover_interval;
         let color = config.color;
         let cache_path_buf = cache_path.to_path_buf();
+        let shutdown_clone = shutdown.clone();
 
         Some(tokio::spawn(async move {
             let mut discovery_timer = interval(Duration::from_secs(discover_interval));
             discovery_timer.tick().await; // Skip the first immediate tick
 
             loop {
+                // Check for shutdown signal
+                if shutdown_clone.load(Ordering::SeqCst) {
+                    break;
+                }
+
                 discovery_timer.tick().await;
 
                 // Mark discovery as active
@@ -333,6 +351,14 @@ async fn monitor_async_impl(config: AsyncMonitorConfig<'_>) -> Result<()> {
     let mut monitor_timer = interval(Duration::from_secs(config.interval));
 
     loop {
+        // Check for shutdown signal
+        if shutdown.load(Ordering::SeqCst) {
+            if matches!(config.format, OutputFormat::Text) {
+                print_info("\n✅ Shutting down gracefully...", config.color);
+            }
+            break;
+        }
+
         tokio::select! {
             _ = monitor_timer.tick() => {
                 // Collect and display stats
@@ -373,6 +399,8 @@ async fn monitor_async_impl(config: AsyncMonitorConfig<'_>) -> Result<()> {
             }
         }
     }
+
+    Ok(())
 }
 
 async fn update_and_display(
