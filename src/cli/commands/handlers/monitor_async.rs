@@ -127,11 +127,6 @@ pub async fn monitor_async(config: AsyncMonitorConfig<'_>) -> Result<()> {
 
     // Set up signal handling for graceful shutdown
     let shutdown = Arc::new(AtomicBool::new(false));
-    let shutdown_clone = shutdown.clone();
-
-    ctrlc::set_handler(move || {
-        shutdown_clone.store(true, Ordering::SeqCst);
-    })?;
 
     monitor_async_impl(config, shutdown).await
 }
@@ -326,16 +321,24 @@ async fn monitor_async_impl(
     let mut monitor_timer = interval(Duration::from_secs(config.interval));
 
     loop {
-        // Check for shutdown signal
-        if shutdown.load(Ordering::SeqCst) {
-            if matches!(config.format, OutputFormat::Text) {
-                print_info("\n✅ Shutting down gracefully...", config.color);
-            }
-            break;
-        }
-
         tokio::select! {
+            // Check for shutdown signal with high priority
+            _ = tokio::signal::ctrl_c() => {
+                if matches!(config.format, OutputFormat::Text) {
+                    print_info("\n✅ Shutting down gracefully...", config.color);
+                }
+                break;
+            }
+
             _ = monitor_timer.tick() => {
+                // Check shutdown flag set by signal handler
+                if shutdown.load(Ordering::SeqCst) {
+                    if matches!(config.format, OutputFormat::Text) {
+                        print_info("\n✅ Shutting down gracefully...", config.color);
+                    }
+                    break;
+                }
+
                 // Collect and display stats
                 update_and_display(
                     &state,
