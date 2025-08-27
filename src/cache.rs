@@ -3,9 +3,51 @@ use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::api::{Device, DeviceFilter, DeviceStats, DeviceStatus};
+
+/// Get the default cache directory for axectl
+///
+/// Returns ~/.cache/axectl/devices on Unix-like systems
+/// Returns %LOCALAPPDATA%\axectl\devices on Windows
+pub fn get_default_cache_dir() -> Result<PathBuf> {
+    let cache_dir = if cfg!(target_os = "windows") {
+        // Windows: Use %LOCALAPPDATA%\axectl
+        PathBuf::from(
+            std::env::var("LOCALAPPDATA").context("LOCALAPPDATA environment variable not set")?,
+        )
+        .join("axectl")
+    } else if let Some(cache_dir) = dirs::cache_dir() {
+        // Unix-like: Use ~/.cache/axectl (XDG base directory)
+        cache_dir.join("axectl")
+    } else {
+        // Fallback to ~/.axectl
+        dirs::home_dir()
+            .context("Could not determine home directory")?
+            .join(".axectl")
+    };
+
+    Ok(cache_dir.join("devices"))
+}
+
+/// Get the cache directory, using the provided path or falling back to default
+pub fn get_cache_dir(cache_dir: Option<&Path>) -> Result<std::borrow::Cow<'_, Path>> {
+    match cache_dir {
+        Some(path) => Ok(std::borrow::Cow::Borrowed(path)),
+        None => {
+            let default_dir = get_default_cache_dir()?;
+            // Ensure the directory exists
+            std::fs::create_dir_all(&default_dir).with_context(|| {
+                format!(
+                    "Failed to create cache directory: {}",
+                    default_dir.display()
+                )
+            })?;
+            Ok(std::borrow::Cow::Owned(default_dir))
+        }
+    }
+}
 
 /// Enhanced cached device
 #[derive(Debug, Clone, Serialize, Deserialize)]

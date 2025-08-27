@@ -1,10 +1,10 @@
 use crate::api::{Device, DeviceStats, DeviceStatus, SwarmSummary};
-use crate::cache::DeviceCache;
+use crate::cache::{get_cache_dir, DeviceCache};
 use crate::cli::commands::handlers::discovery::perform_discovery;
 use crate::cli::commands::{DeviceFilterArg, OutputFormat};
 use crate::output::{
-    format_hashrate, format_power, format_table, format_uptime, print_error, print_info,
-    print_json, print_success, print_warning, ColoredTemperature,
+    format_hashrate, format_power, format_table, format_uptime, print_info, print_json,
+    print_success, print_warning, ColoredTemperature,
 };
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -177,34 +177,9 @@ async fn monitor_async_impl(
     config: AsyncMonitorConfig<'_>,
     shutdown: Arc<AtomicBool>,
 ) -> Result<()> {
-    // Require cache_dir for monitor command
-    let cache_path = match config.cache_dir {
-        Some(path) => path,
-        None => {
-            match config.format {
-                OutputFormat::Json => {
-                    let output = serde_json::json!({
-                        "error": "Cache directory required",
-                        "message": "Use --cache-dir to specify where device data is stored",
-                        "example": "axectl monitor --cache-dir ~/devices"
-                    });
-                    print_json(&output, true)?;
-                }
-                OutputFormat::Text => {
-                    print_error("Cache directory required for monitor command", config.color);
-                    print_info(
-                        "Use --cache-dir to specify where device data is stored",
-                        config.color,
-                    );
-                    print_info(
-                        "Example: axectl monitor --cache-dir ~/devices",
-                        config.color,
-                    );
-                }
-            }
-            return Ok(());
-        }
-    };
+    // Get cache directory, using default if not provided
+    let cache_path = get_cache_dir(config.cache_dir)?;
+    let cache_path = cache_path.as_ref();
 
     // Initialize shared state
     let state = Arc::new(RwLock::new(MonitorState {

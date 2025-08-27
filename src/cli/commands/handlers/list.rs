@@ -1,3 +1,4 @@
+use crate::cache::get_cache_dir;
 use crate::cli::commands::{DeviceFilterArg, OutputFormat};
 use anyhow::Result;
 use crossterm::{
@@ -72,8 +73,8 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
     use crate::api::{DeviceStatus, SwarmSummary};
     use crate::cache::DeviceCache;
     use crate::output::{
-        format_hashrate, format_power, format_table, format_uptime, print_error, print_info,
-        print_json, print_success, print_warning, ColoredTemperature,
+        format_hashrate, format_power, format_table, format_uptime, print_info, print_json,
+        print_success, print_warning, ColoredTemperature,
     };
     use std::collections::HashMap;
 
@@ -128,31 +129,9 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
     let mut previous_hashrates: HashMap<String, f64> = HashMap::new();
     let mut alert_count = 0;
 
-    // Require cache_dir for list command
-    let cache_path = match args.cache_dir {
-        Some(path) => path,
-        None => {
-            match args.format {
-                OutputFormat::Json => {
-                    let output = serde_json::json!({
-                        "error": "Cache directory required",
-                        "message": "Use --cache-dir to specify where device data is stored",
-                        "example": "axectl list --cache-dir ~/devices"
-                    });
-                    print_json(&output, true)?;
-                }
-                OutputFormat::Text => {
-                    print_error("Cache directory required for list command", args.color);
-                    print_info(
-                        "Use --cache-dir to specify where device data is stored",
-                        args.color,
-                    );
-                    print_info("Example: axectl list --cache-dir ~/devices", args.color);
-                }
-            }
-            return Ok(());
-        }
-    };
+    // Get cache directory, using default if not provided
+    let cache_path = get_cache_dir(args.cache_dir)?;
+    let cache_path = cache_path.as_ref();
 
     loop {
         // Perform discovery if requested
