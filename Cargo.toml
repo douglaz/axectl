@@ -19,7 +19,7 @@ clap = { version = "4", features = ["derive"] }
 tabled = { version = "0.20", features = ["std", "ansi"] }
 colored = "3"
 strum = { version = "0.27", features = ["derive"] }
-crossterm = "0.28"
+crossterm = "0.29"
 
 # Network
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
