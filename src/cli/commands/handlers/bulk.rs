@@ -15,12 +15,12 @@ pub async fn bulk(
     color: bool,
     cache_dir: Option<&Path>,
 ) -> Result<()> {
-    // Require cache directory for bulk operations
-    let cache_path = cache_dir
-        .context("Cache directory required for bulk operations. Use --cache-dir to specify.")?;
+    // Get cache directory, using default if not provided
+    let cache_path = crate::cache::get_cache_dir(cache_dir)?;
+    let cache_path_ref = cache_path.as_ref();
 
     // Load cache
-    let cache = DeviceCache::load(cache_path)?;
+    let cache = DeviceCache::load(cache_path_ref)?;
 
     if cache.is_empty() {
         match format {
