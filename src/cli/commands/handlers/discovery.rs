@@ -23,35 +23,37 @@ pub async fn perform_discovery(
     cache_dir: Option<&std::path::Path>,
     color: bool,
 ) -> Result<Vec<crate::api::DeviceInfo>> {
+    use crate::cache::get_cache_dir;
     use crate::discovery::{mdns, network as net_utils, scanner};
     use crate::output::print_info;
 
     let discovery_timeout = Duration::from_secs(timeout);
     let mut all_devices = Vec::new();
 
-    // Load cache if cache directory is provided
-    let mut cache = if let Some(cache_path) = cache_dir {
-        match crate::cache::DeviceCache::load(cache_path) {
-            Ok(cache) => {
-                if !cache.is_empty() {
-                    print_info(
-                        &format!(
-                            "Loaded cache with {} devices ({}s old)",
-                            cache.device_count(),
-                            cache.age_seconds()
-                        ),
-                        color,
-                    );
-                }
-                Some(cache)
+    // Get cache directory, using default if not provided
+    let cache_path = get_cache_dir(cache_dir)?;
+    let cache_path_ref = cache_path.as_ref();
+
+    // Load cache
+    let mut cache = match crate::cache::DeviceCache::load(cache_path_ref) {
+        Ok(cache) => {
+            if !cache.is_empty() {
+                print_info(
+                    &format!(
+                        "Loaded cache with {} devices ({}s old)",
+                        cache.device_count(),
+                        cache.age_seconds()
+                    ),
+                    color,
+                );
             }
-            Err(e) => {
-                tracing::warn!("Failed to load cache: {}", e);
-                None
-            }
+            Some(cache)
         }
-    } else {
-        None
+        Err(e) => {
+            // It's normal for cache not to exist on first run
+            tracing::debug!("Cache not loaded: {}", e);
+            Some(crate::cache::DeviceCache::new())
+        }
     };
 
     // Determine network to scan
@@ -163,7 +165,7 @@ pub async fn perform_discovery(
     // Note: Devices will be saved to cache below, no need for separate storage
 
     // Update cache with discovered devices
-    if let (Some(ref mut cache), Some(cache_path)) = (cache.as_mut(), cache_dir) {
+    if let Some(ref mut cache) = cache.as_mut() {
         for device in &all_devices {
             cache.update_device(device.clone());
         }
@@ -171,7 +173,7 @@ pub async fn perform_discovery(
         // Prune old devices (older than 7 days)
         cache.prune_old(chrono::Duration::days(7));
 
-        if let Err(e) = cache.save(cache_path) {
+        if let Err(e) = cache.save(cache_path_ref) {
             tracing::warn!("Failed to save cache: {}", e);
         } else if !all_devices.is_empty() {
             tracing::debug!("Updated cache with {} devices", all_devices.len());
@@ -238,14 +240,13 @@ pub async fn discover(
                 println!("{}", format_table(table_rows, color));
                 print_success(&format!("Found {} device(s)", all_devices.len()), color);
 
-                // Suggest using cache if not already
+                // Show cache location if using default
                 if cache_dir.is_none() && !all_devices.is_empty() {
                     eprintln!();
-                    print_info(
-                        "💡 Tip: Use --cache-dir to save discovered devices for faster access",
-                        color,
-                    );
-                    print_info("   Example: axectl discover --cache-dir ~/devices", color);
+                    let default_cache = crate::cache::get_default_cache_dir()
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_else(|_| "~/.cache/axectl/devices".to_string());
+                    print_info(&format!("💾 Devices cached in: {}", default_cache), color);
                 }
             }
         }

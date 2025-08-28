@@ -25,7 +25,7 @@ pub struct Cli {
     #[arg(long, short, global = true)]
     pub verbose: bool,
 
-    /// Optional cache directory for faster discovery
+    /// Cache directory for device data (defaults to ~/.cache/axectl/devices)
     #[arg(long, global = true)]
     pub cache_dir: Option<PathBuf>,
 }
