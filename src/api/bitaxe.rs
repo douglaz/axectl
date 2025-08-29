@@ -87,6 +87,7 @@ impl BitaxeInfoResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
 
     const SAMPLE_BITAXE_RESPONSE: &str = r#"{
         "ASICModel": "BM1368",
@@ -113,8 +114,8 @@ mod tests {
     }"#;
 
     #[test]
-    fn test_bitaxe_parsing() {
-        let response: BitaxeInfoResponse = serde_json::from_str(SAMPLE_BITAXE_RESPONSE).unwrap();
+    fn test_bitaxe_parsing() -> Result<()> {
+        let response: BitaxeInfoResponse = serde_json::from_str(SAMPLE_BITAXE_RESPONSE)?;
 
         assert_eq!(response.asic_model, "BM1368");
         assert_eq!(response.board_version, Some("204".to_string()));
@@ -130,10 +131,11 @@ mod tests {
         assert_eq!(response.hash_rate, 485.2);
         assert_eq!(response.shares_accepted, 150);
         assert_eq!(response.shares_rejected, 2);
+        Ok(())
     }
 
     #[test]
-    fn test_bitaxe_minimal_response() {
+    fn test_bitaxe_minimal_response() -> Result<()> {
         let minimal_response = r#"{
             "ASICModel": "BM1368",
             "version": "2.0.0",
@@ -153,15 +155,16 @@ mod tests {
             "sharesRejected": 1
         }"#;
 
-        let response: BitaxeInfoResponse = serde_json::from_str(minimal_response).unwrap();
+        let response: BitaxeInfoResponse = serde_json::from_str(minimal_response)?;
         assert_eq!(response.hostname, "bitaxe-minimal");
         assert_eq!(response.board_version, None);
         assert_eq!(response.ssid, None);
+        Ok(())
     }
 
     #[test]
-    fn test_bitaxe_to_unified_info() {
-        let response: BitaxeInfoResponse = serde_json::from_str(SAMPLE_BITAXE_RESPONSE).unwrap();
+    fn test_bitaxe_to_unified_info() -> Result<()> {
+        let response: BitaxeInfoResponse = serde_json::from_str(SAMPLE_BITAXE_RESPONSE)?;
         let unified = response.to_unified_info();
 
         assert_eq!(unified.hostname, "bitaxe-test");
@@ -174,11 +177,12 @@ mod tests {
         assert_eq!(unified.pool_port, 4334);
         assert_eq!(unified.frequency, 485);
         assert_eq!(unified.voltage, 1200.0);
+        Ok(())
     }
 
     #[test]
-    fn test_bitaxe_to_unified_stats() {
-        let response: BitaxeInfoResponse = serde_json::from_str(SAMPLE_BITAXE_RESPONSE).unwrap();
+    fn test_bitaxe_to_unified_stats() -> Result<()> {
+        let response: BitaxeInfoResponse = serde_json::from_str(SAMPLE_BITAXE_RESPONSE)?;
         let stats = response.to_unified_stats();
 
         assert_eq!(stats.hashrate, 485.2);
@@ -190,17 +194,19 @@ mod tests {
         assert_eq!(stats.uptime, 3600);
         assert_eq!(stats.best_difficulty, Some("123.45K".to_string()));
         assert_eq!(stats.session_id, Some("2.0.0".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn test_bitaxe_invalid_json() {
+    fn test_bitaxe_invalid_json() -> Result<()> {
         let invalid_json = r#"{"invalid": "json"}"#;
         let result: Result<BitaxeInfoResponse, _> = serde_json::from_str(invalid_json);
         assert!(result.is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_bitaxe_partial_json() {
+    fn test_bitaxe_partial_json() -> Result<()> {
         // Test with missing required fields
         let partial_json = r#"{
             "ASICModel": "BM1368",
@@ -208,5 +214,6 @@ mod tests {
         }"#;
         let result: Result<BitaxeInfoResponse, _> = serde_json::from_str(partial_json);
         assert!(result.is_err());
+        Ok(())
     }
 }

@@ -345,7 +345,11 @@ impl DeviceStats {
             shares_accepted: stats.shares_accepted,
             shares_rejected: stats.shares_rejected,
             uptime_seconds: stats.uptime,
-            pool_url: Some(format!("{}:{}", info.pool_url, info.pool_port)),
+            pool_url: Some(format!(
+                "{url}:{port}",
+                url = info.pool_url,
+                port = info.pool_port
+            )),
             wifi_rssi: info.wifi_rssi,
             voltage: Some(info.voltage),
             frequency: Some(info.frequency),

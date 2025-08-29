@@ -87,6 +87,7 @@ impl NerdQaxeInfoResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
 
     const SAMPLE_NERDQAXE_RESPONSE: &str = r#"{
         "deviceModel": "NerdQAxe++",
@@ -115,9 +116,8 @@ mod tests {
     }"#;
 
     #[test]
-    fn test_nerdqaxe_parsing() {
-        let response: NerdQaxeInfoResponse =
-            serde_json::from_str(SAMPLE_NERDQAXE_RESPONSE).unwrap();
+    fn test_nerdqaxe_parsing() -> Result<()> {
+        let response: NerdQaxeInfoResponse = serde_json::from_str(SAMPLE_NERDQAXE_RESPONSE)?;
 
         assert_eq!(response.device_model, "NerdQAxe++");
         assert_eq!(response.asic_model, "BM1368");
@@ -134,10 +134,11 @@ mod tests {
         assert_eq!(response.hash_rate, 512.7);
         assert_eq!(response.shares_accepted, 225);
         assert_eq!(response.shares_rejected, 3);
+        Ok(())
     }
 
     #[test]
-    fn test_nerdqaxe_minimal_response() {
+    fn test_nerdqaxe_minimal_response() -> Result<()> {
         let minimal_response = r#"{
             "deviceModel": "NerdQAxe+",
             "ASICModel": "BM1368",
@@ -157,11 +158,12 @@ mod tests {
             "sharesRejected": 2
         }"#;
 
-        let response: NerdQaxeInfoResponse = serde_json::from_str(minimal_response).unwrap();
+        let response: NerdQaxeInfoResponse = serde_json::from_str(minimal_response)?;
         assert_eq!(response.hostname, "nerdqaxe-minimal");
         assert_eq!(response.version, None);
         assert_eq!(response.ssid, None);
         assert_eq!(response.host_ip, None);
+        Ok(())
     }
 
     #[test]
@@ -200,14 +202,15 @@ mod tests {
     }
 
     #[test]
-    fn test_nerdqaxe_invalid_json() {
+    fn test_nerdqaxe_invalid_json() -> Result<()> {
         let invalid_json = r#"{"invalid": "json"}"#;
         let result: Result<NerdQaxeInfoResponse, _> = serde_json::from_str(invalid_json);
         assert!(result.is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_nerdqaxe_partial_json() {
+    fn test_nerdqaxe_partial_json() -> Result<()> {
         // Test with missing required fields
         let partial_json = r#"{
             "deviceModel": "NerdQAxe++",
@@ -215,5 +218,6 @@ mod tests {
         }"#;
         let result: Result<NerdQaxeInfoResponse, _> = serde_json::from_str(partial_json);
         assert!(result.is_err());
+        Ok(())
     }
 }
