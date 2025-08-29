@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -1075,14 +1075,20 @@ mod tests {
 
         // Should only include types that have devices
         assert_eq!(summaries.len(), 2);
-        assert!(summaries
-            .iter()
-            .any(|s| s.device_type == DeviceType::BitaxeMax));
-        assert!(summaries
-            .iter()
-            .any(|s| s.device_type == DeviceType::NerdqaxePlus));
-        assert!(!summaries
-            .iter()
-            .any(|s| s.device_type == DeviceType::BitaxeUltra));
+        assert!(
+            summaries
+                .iter()
+                .any(|s| s.device_type == DeviceType::BitaxeMax)
+        );
+        assert!(
+            summaries
+                .iter()
+                .any(|s| s.device_type == DeviceType::NerdqaxePlus)
+        );
+        assert!(
+            !summaries
+                .iter()
+                .any(|s| s.device_type == DeviceType::BitaxeUltra)
+        );
     }
 }

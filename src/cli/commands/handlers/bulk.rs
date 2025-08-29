@@ -192,14 +192,13 @@ fn filter_devices(
 
     // Filter by IP addresses
     for ip_address in ip_addresses {
-        if let Some(cached) = cache.get_device(ip_address) {
-            if cached.device.status == DeviceStatus::Online
-                && !devices
-                    .iter()
-                    .any(|d: &Device| d.ip_address == cached.device.ip_address)
-            {
-                devices.push(cached.device.clone());
-            }
+        if let Some(cached) = cache.get_device(ip_address)
+            && cached.device.status == DeviceStatus::Online
+            && !devices
+                .iter()
+                .any(|d: &Device| d.ip_address == cached.device.ip_address)
+        {
+            devices.push(cached.device.clone());
         }
     }
 

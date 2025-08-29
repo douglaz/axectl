@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use ipnetwork::{IpNetwork, Ipv4Network};
 use local_ip_address::local_ip;
 use std::net::{IpAddr, Ipv4Addr};
@@ -152,9 +152,11 @@ mod tests {
     fn test_get_fallback_networks() {
         let fallbacks = get_fallback_networks();
         assert!(!fallbacks.is_empty());
-        assert!(fallbacks
-            .iter()
-            .any(|net| net.to_string().contains("192.168.1.0")));
+        assert!(
+            fallbacks
+                .iter()
+                .any(|net| net.to_string().contains("192.168.1.0"))
+        );
     }
 
     #[test]

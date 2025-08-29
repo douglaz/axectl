@@ -11,7 +11,7 @@ pub async fn control(
     cache_dir: Option<&Path>,
 ) -> Result<()> {
     use crate::api::{AxeOsClient, SystemUpdateRequest};
-    use crate::cache::{get_cache_dir, DeviceCache};
+    use crate::cache::{DeviceCache, get_cache_dir};
     use crate::output::{print_error, print_info, print_json, print_success};
 
     // Get cache directory, using default if not provided
@@ -115,20 +115,20 @@ pub async fn control(
             OutputFormat::Text => {
                 if command_result.success {
                     print_success(&command_result.message, color);
-                    if let Some(data) = &command_result.data {
-                        if let Some(networks) = data.get("networks") {
-                            println!("WiFi Networks:");
-                            if let Some(networks_array) = networks.as_array() {
-                                for network in networks_array {
-                                    if let (Some(ssid), Some(rssi)) =
-                                        (network.get("ssid"), network.get("rssi"))
-                                    {
-                                        println!(
-                                            "  {} ({}dBm)",
-                                            ssid.as_str().unwrap_or("Unknown"),
-                                            rssi.as_i64().unwrap_or(0)
-                                        );
-                                    }
+                    if let Some(data) = &command_result.data
+                        && let Some(networks) = data.get("networks")
+                    {
+                        println!("WiFi Networks:");
+                        if let Some(networks_array) = networks.as_array() {
+                            for network in networks_array {
+                                if let (Some(ssid), Some(rssi)) =
+                                    (network.get("ssid"), network.get("rssi"))
+                                {
+                                    println!(
+                                        "  {} ({}dBm)",
+                                        ssid.as_str().unwrap_or("Unknown"),
+                                        rssi.as_i64().unwrap_or(0)
+                                    );
                                 }
                             }
                         }

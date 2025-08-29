@@ -5,7 +5,7 @@ use std::time::Duration;
 use tokio::time::timeout;
 
 use crate::api::{AxeOsClient, Device, DeviceStatus, DeviceType};
-use crate::discovery::network::{get_network_addresses, NetworkInfo};
+use crate::discovery::network::{NetworkInfo, get_network_addresses};
 
 #[derive(Debug, Clone)]
 pub struct ScanResult {
