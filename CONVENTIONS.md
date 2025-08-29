@@ -1,7 +1,7 @@
 # Rust Coding Conventions
 
 ## String Interpolation
-For format!, println!, info!, debug!, and similar macros:
+For `format!`, `println!`, `info!`, `debug!`, `bail!`, and similar macros:
 
 ### Correct Usage:
 - ALWAYS use direct variable names when they match the placeholder name:
@@ -54,6 +54,19 @@ For format!, println!, info!, debug!, and similar macros:
 
 ## Error Handling
 
+Always use `anyhow` for error handling throughout the codebase.
+
+### Import Pattern
+Always import anyhow's Result type to use as the default Result:
+```rust
+use anyhow::{anyhow, bail, Context, Result};
+
+// Then use Result<T> in function signatures
+pub fn some_function() -> Result<String> {
+    // ...
+}
+```
+
 ### Correct Usage:
 - ALWAYS use anyhow for error handling, particularly bail! and ensure!:
   ```rust
@@ -62,6 +75,9 @@ For format!, println!, info!, debug!, and similar macros:
 
   // For early returns with errors
   bail!("Failed with error: {error_message}");
+  
+  // Instead of return Err(anyhow::anyhow!(...))
+  bail!("Error message"); // Cleaner and more idiomatic
   ```
 
 - IMPORTANT: When using `.context()` vs `.with_context()` for error handling:
@@ -92,6 +108,25 @@ For format!, println!, info!, debug!, and similar macros:
   ```
 
 - REMEMBER: All string interpolation rules apply to ALL format strings, including those inside `with_context` closures
+
+### When to Use Each Error Handling Approach:
+
+- **`.context("message")`**: Use for static error messages that don't need formatting
+- **`.with_context(|| format!("..."))`**: Use when you need dynamic error messages with variables
+- **`.map_err(|e| anyhow!("..."))`**: Use only when you need to transform the error type or preserve the original error details
+- **`bail!("...")`**: Use for early returns with custom error messages
+- **`ensure!(condition, "...")`**: Use for validation checks that should fail with specific messages
+
+**For Option types**: Use `.context()` instead of `.ok_or_else(|| anyhow!(...))`:
+```rust
+// GOOD - Clean and idiomatic
+let value = optional_value.context("Value not found")?;
+
+// BAD - Verbose and awkward
+let value = optional_value.ok_or_else(|| anyhow!("Value not found"))?;
+```
+
+**Note**: Some external crate error types may not implement the traits required for `.context()`. In these cases, continue using `.map_err(|e| anyhow!("..."))` as needed.
 
 ### Incorrect Usage:
 - NEVER use unwrap() or panic!:
@@ -143,3 +178,59 @@ For format!, println!, info!, debug!, and similar macros:
 - After any changes that touch multiple files
 
 **Important**: Code must be properly formatted and pass all clippy checks before being committed to the repository.
+
+## Test Error Handling
+
+### Test Function Standards
+
+All test functions should use proper error handling patterns:
+
+```rust
+#[test]
+fn test_example() -> Result<()> {
+    // Use ? operator instead of .unwrap()
+    let data = parse_data(input)?;
+    let json = serde_json::to_string(&data)?;
+    
+    // For testing error conditions, use pattern matching
+    let result = fallible_operation();
+    assert!(result.is_err());
+    if let Err(e) = result {
+        assert!(e.to_string().contains("expected error message"));
+    }
+    
+    // Always end with Ok(())
+    Ok(())
+}
+```
+
+### Test Error Handling Rules
+
+1. **Return `Result<()>`**: All test functions should return `Result<()>` to enable proper error propagation
+2. **Use `?` operator**: Replace `.unwrap()` calls with the `?` operator for cleaner error handling
+3. **End with `Ok(())`**: Always end test functions with `Ok(())` to satisfy the return type
+4. **Error testing**: When testing error conditions, use pattern matching instead of `.unwrap_err()`
+5. **File operations**: Use `?` operator for file I/O operations in tests
+6. **JSON operations**: Use `?` operator for JSON serialization/deserialization in tests
+
+### Incorrect Test Patterns
+
+```rust
+// BAD - Will panic on error
+#[test]
+fn bad_test() {
+    let data = parse_data(input).unwrap(); // BAD
+    let json = serde_json::to_string(&data).unwrap(); // BAD
+    
+    let result = fallible_operation();
+    assert!(result.unwrap_err().to_string().contains("error")); // BAD
+}
+
+// BAD - Missing return type
+#[test]
+fn another_bad_test() -> Result<()> {
+    let data = parse_data(input)?;
+    assert_eq!(data.len(), 5);
+    // Missing Ok(()) - will not compile
+}
+```

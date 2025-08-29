@@ -202,50 +202,55 @@ pub async fn quick_health_check(ip: &str) -> Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
 
     #[tokio::test]
-    async fn test_scan_config_defaults() {
+    async fn test_scan_config_defaults() -> Result<()> {
         let config = ScanConfig::default();
         assert_eq!(config.timeout_per_host, Duration::from_millis(500));
         assert_eq!(config.parallel_scans, 50);
         assert!(config.axeos_only);
         assert!(!config.include_unreachable);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_probe_single_device_invalid_ip() {
+    async fn test_probe_single_device_invalid_ip() -> Result<()> {
         let result = probe_single_device("not.an.ip", Duration::from_millis(100)).await;
         assert!(result.is_err());
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_probe_single_device_unreachable() {
+    async fn test_probe_single_device_unreachable() -> Result<()> {
         // Use a reserved IP that should not respond
         let result = probe_single_device("192.0.2.1", Duration::from_millis(100)).await;
 
         match result {
             Ok(None) => {} // Expected - no device found
-            Ok(Some(_)) => panic!("Should not find a device on reserved IP"),
+            Ok(Some(_)) => anyhow::bail!("Should not find a device on reserved IP"),
             Err(_) => {} // Also acceptable - network error
         }
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_quick_health_check() {
+    async fn test_quick_health_check() -> Result<()> {
         // Test with localhost (should fail since we don't run AxeOS there)
         let result = quick_health_check("127.0.0.1").await;
 
         match result {
             Ok(false) => {} // Expected
-            Ok(true) => panic!("Localhost should not be running AxeOS"),
+            Ok(true) => anyhow::bail!("Localhost should not be running AxeOS"),
             Err(_) => {} // Connection error is acceptable
         }
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_scan_small_network() {
+    async fn test_scan_small_network() -> Result<()> {
         // Test scanning a very small network range
-        let network: IpNetwork = "192.0.2.0/30".parse().unwrap(); // 4 addresses
+        let network: IpNetwork = "192.0.2.0/30".parse()?; // 4 addresses
         let config = ScanConfig {
             timeout_per_host: Duration::from_millis(50),
             parallel_scans: 2,
@@ -256,14 +261,15 @@ mod tests {
         let result = scan_network(network, config).await;
         assert!(result.is_ok());
 
-        let scan_result = result.unwrap();
+        let scan_result = result?;
         assert_eq!(scan_result.scan_info.addresses_scanned, 2); // Should skip network/broadcast
         assert!(scan_result.scan_info.scan_duration_seconds > 0.0);
         assert_eq!(scan_result.devices_found.len(), 0); // Should find no devices in test range
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_scan_config_custom() {
+    async fn test_scan_config_custom() -> Result<()> {
         let config = ScanConfig {
             timeout_per_host: Duration::from_millis(1000),
             parallel_scans: 10,
@@ -275,11 +281,12 @@ mod tests {
         assert_eq!(config.parallel_scans, 10);
         assert!(!config.axeos_only);
         assert!(config.include_unreachable);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_scan_result_structure() {
-        let network: IpNetwork = "192.0.2.0/30".parse().unwrap();
+    async fn test_scan_result_structure() -> Result<()> {
+        let network: IpNetwork = "192.0.2.0/30".parse()?;
         let config = ScanConfig {
             timeout_per_host: Duration::from_millis(10),
             parallel_scans: 1,
@@ -287,7 +294,7 @@ mod tests {
             include_unreachable: false,
         };
 
-        let result = scan_network(network, config).await.unwrap();
+        let result = scan_network(network, config).await?;
 
         // Verify ScanResult structure
         assert!(result.devices_found.is_empty());
@@ -300,12 +307,13 @@ mod tests {
         // Verify NetworkInfo is populated
         assert!(!result.scan_info.network_scanned.network_str.is_empty());
         assert!(result.scan_info.network_scanned.host_count > 0);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_scan_ipv6_network() {
+    async fn test_scan_ipv6_network() -> Result<()> {
         // Test with a small IPv6 network
-        let network: IpNetwork = "2001:db8::/126".parse().unwrap(); // 4 addresses
+        let network: IpNetwork = "2001:db8::/126".parse()?; // 4 addresses
         let config = ScanConfig {
             timeout_per_host: Duration::from_millis(10),
             parallel_scans: 2,
@@ -316,52 +324,56 @@ mod tests {
         let result = scan_network(network, config).await;
         assert!(result.is_ok());
 
-        let scan_result = result.unwrap();
+        let scan_result = result?;
         // IPv6 doesn't skip network/broadcast addresses like IPv4
         assert_eq!(scan_result.scan_info.addresses_scanned, 4);
         assert_eq!(scan_result.devices_found.len(), 0);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_probe_single_device_valid_ip() {
+    async fn test_probe_single_device_valid_ip() -> Result<()> {
         // Test with a valid but unreachable IP
         let result = probe_single_device("198.51.100.1", Duration::from_millis(10)).await;
 
         // Should either return Ok(None) or an error, but not a device
         match result {
             Ok(None) => {} // Expected
-            Ok(Some(_)) => panic!("Should not find device on test IP"),
+            Ok(Some(_)) => anyhow::bail!("Should not find device on test IP"),
             Err(_) => {} // Also acceptable
         }
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_probe_single_device_localhost() {
+    async fn test_probe_single_device_localhost() -> Result<()> {
         // Test with localhost - should be reachable but not AxeOS
         let result = probe_single_device("127.0.0.1", Duration::from_millis(100)).await;
 
         match result {
             Ok(None) => {} // Expected - no AxeOS device
-            Ok(Some(_)) => panic!("Localhost should not be detected as AxeOS device"),
+            Ok(Some(_)) => anyhow::bail!("Localhost should not be detected as AxeOS device"),
             Err(_) => {} // Connection error is acceptable
         }
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_quick_health_check_unreachable() {
+    async fn test_quick_health_check_unreachable() -> Result<()> {
         // Test with reserved IP that should not respond
         let result = quick_health_check("192.0.2.254").await;
 
         match result {
             Ok(false) => {} // Expected
-            Ok(true) => panic!("Reserved IP should not be healthy"),
+            Ok(true) => anyhow::bail!("Reserved IP should not be healthy"),
             Err(_) => {} // Network error is acceptable
         }
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_scan_with_include_unreachable() {
-        let network: IpNetwork = "192.0.2.0/30".parse().unwrap();
+    async fn test_scan_with_include_unreachable() -> Result<()> {
+        let network: IpNetwork = "192.0.2.0/30".parse()?;
         let config = ScanConfig {
             timeout_per_host: Duration::from_millis(10),
             parallel_scans: 1,
@@ -369,7 +381,7 @@ mod tests {
             include_unreachable: true,
         };
 
-        let result = scan_network(network, config).await.unwrap();
+        let result = scan_network(network, config).await?;
 
         // With include_unreachable=true, we might get offline devices
         // The length is always >= 0, so we just verify it completes successfully
@@ -382,11 +394,12 @@ mod tests {
                 assert!(device.serial_number.is_none());
             }
         }
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_scan_with_axeos_only_false() {
-        let network: IpNetwork = "192.0.2.0/31".parse().unwrap(); // 2 addresses
+    async fn test_scan_with_axeos_only_false() -> Result<()> {
+        let network: IpNetwork = "192.0.2.0/31".parse()?; // 2 addresses
         let config = ScanConfig {
             timeout_per_host: Duration::from_millis(10),
             parallel_scans: 1,
@@ -394,15 +407,16 @@ mod tests {
             include_unreachable: false,
         };
 
-        let result = scan_network(network, config).await.unwrap();
+        let result = scan_network(network, config).await?;
 
         // Should complete without error even with axeos_only=false
         assert_eq!(result.scan_info.addresses_scanned, 2);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_parallel_scan_performance() {
-        let network: IpNetwork = "192.0.2.0/29".parse().unwrap(); // 8 addresses
+    async fn test_parallel_scan_performance() -> Result<()> {
+        let network: IpNetwork = "192.0.2.0/29".parse()?; // 8 addresses
 
         // Test with different parallel scan settings
         let config_serial = ScanConfig {
@@ -420,11 +434,11 @@ mod tests {
         };
 
         let start = std::time::Instant::now();
-        let result1 = scan_network(network, config_serial).await.unwrap();
+        let result1 = scan_network(network, config_serial).await?;
         let serial_duration = start.elapsed();
 
         let start = std::time::Instant::now();
-        let result2 = scan_network(network, config_parallel).await.unwrap();
+        let result2 = scan_network(network, config_parallel).await?;
         let parallel_duration = start.elapsed();
 
         // Both should find the same number of devices (0 in test network)
@@ -437,5 +451,6 @@ mod tests {
         // Parallel should generally be faster, but allow for some variance in test environment
         // This is more of a sanity check than a strict performance requirement
         assert!(parallel_duration <= serial_duration + Duration::from_millis(50));
+        Ok(())
     }
 }

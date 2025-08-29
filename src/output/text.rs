@@ -51,33 +51,33 @@ impl Tabled for ColoredTemperature {
 
 pub fn print_success(message: &str, color: bool) {
     if color {
-        eprintln!("{} {}", "✓".green().bold(), message);
+        eprintln!("{icon} {message}", icon = "✓".green().bold());
     } else {
-        eprintln!("✓ {}", message);
+        eprintln!("✓ {message}");
     }
 }
 
 pub fn print_warning(message: &str, color: bool) {
     if color {
-        eprintln!("{} {}", "⚠️".yellow().bold(), message);
+        eprintln!("{icon} {message}", icon = "⚠️".yellow().bold());
     } else {
-        eprintln!("⚠️ {}", message);
+        eprintln!("⚠️ {message}");
     }
 }
 
 pub fn print_error(message: &str, color: bool) {
     if color {
-        eprintln!("{} {}", "✗".red().bold(), message);
+        eprintln!("{icon} {message}", icon = "✗".red().bold());
     } else {
-        eprintln!("✗ {}", message);
+        eprintln!("✗ {message}");
     }
 }
 
 pub fn print_info(message: &str, color: bool) {
     if color {
-        eprintln!("{} {}", "ℹ".blue().bold(), message);
+        eprintln!("{icon} {message}", icon = "ℹ".blue().bold());
     } else {
-        eprintln!("ℹ {}", message);
+        eprintln!("ℹ {message}");
     }
 }
 

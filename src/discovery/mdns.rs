@@ -94,7 +94,7 @@ impl MdnsDiscovery {
                 Ok(devices) => discovered_devices.extend(devices),
                 Err(_) => {
                     // Timeout is expected - mDNS discovery has a time limit
-                    tracing::debug!("mDNS discovery timeout for service: {}", service_name);
+                    tracing::debug!("mDNS discovery timeout for service: {service_name}");
                 }
             }
         }

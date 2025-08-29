@@ -244,7 +244,7 @@ pub async fn discover(
                     let default_cache = crate::cache::get_default_cache_dir()
                         .map(|p| p.display().to_string())
                         .unwrap_or_else(|_| "~/.cache/axectl/devices".to_string());
-                    print_info(&format!("💾 Devices cached in: {}", default_cache), color);
+                    print_info(&format!("💾 Devices cached in: {default_cache}"), color);
                 }
             }
         }

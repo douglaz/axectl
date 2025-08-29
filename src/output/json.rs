@@ -17,7 +17,7 @@ impl<T: Serialize> JsonOutput for T {
 }
 
 pub fn print_json<T: Serialize>(data: &T, pretty: bool) -> Result<()> {
-    println!("{}", data.to_json(pretty)?);
+    println!("{json}", json = data.to_json(pretty)?);
     Ok(())
 }
 

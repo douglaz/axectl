@@ -1,6 +1,6 @@
 use crate::cache::get_cache_dir;
 use crate::cli::commands::{DeviceFilterArg, OutputFormat};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use crossterm::{
     cursor::{Hide, MoveTo, Show},
     execute,
@@ -155,7 +155,7 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
                     eprintln!(); // Add spacing
                 }
                 Err(e) => {
-                    print_warning(&format!("⚠️ Discovery failed: {}", e), args.color);
+                    print_warning(&format!("⚠️ Discovery failed: {e}"), args.color);
                 }
             }
         }
@@ -315,14 +315,23 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
                     let devices_with_stats: Vec<serde_json::Value> = devices
                         .iter()
                         .zip(device_stats.iter())
-                        .map(|(device, stats)| {
-                            let mut device_json = serde_json::to_value(device).unwrap();
+                        .map(|(device, stats)| -> Result<serde_json::Value> {
+                            let mut device_json =
+                                serde_json::to_value(device).with_context(|| {
+                                    format!("Failed to serialize device {name}", name = device.name)
+                                })?;
                             if let Some(stats) = stats {
-                                device_json["stats"] = serde_json::to_value(stats).unwrap();
+                                device_json["stats"] =
+                                    serde_json::to_value(stats).with_context(|| {
+                                        format!(
+                                            "Failed to serialize stats for device {name}",
+                                            name = device.name
+                                        )
+                                    })?;
                             }
-                            device_json
+                            Ok(device_json)
                         })
-                        .collect();
+                        .collect::<Result<Vec<_>>>()?;
 
                     // Calculate swarm summary from devices with stats
                     let online_devices: Vec<_> = devices
@@ -456,7 +465,7 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
                                     )
                                     .to_string(),
                                     power: format_power(stats.power_watts),
-                                    fan_speed: format!("{}", stats.fan_speed_rpm),
+                                    fan_speed: format!("{rpm}", rpm = stats.fan_speed_rpm),
                                     uptime: format_uptime(stats.uptime_seconds),
                                     pool: stats.pool_url.as_deref().unwrap_or("-").to_string(),
                                 }

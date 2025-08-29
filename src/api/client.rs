@@ -21,7 +21,7 @@ impl AxeOsClient {
         let base_url = if ip_address.starts_with("http://") || ip_address.starts_with("https://") {
             ip_address.to_string()
         } else {
-            format!("http://{}", ip_address)
+            format!("http://{ip_address}")
         };
 
         // Validate URL
@@ -207,7 +207,7 @@ impl AxeOsClient {
                 .unwrap_or_else(|_| "Unknown error".to_string());
             CommandResult {
                 success: false,
-                message: format!("Failed to update system settings: {}", error_text),
+                message: format!("Failed to update system settings: {error_text}"),
                 data: None,
                 timestamp: chrono::Utc::now(),
             }
@@ -241,7 +241,7 @@ impl AxeOsClient {
                 .unwrap_or_else(|_| "Unknown error".to_string());
             CommandResult {
                 success: false,
-                message: format!("Failed to restart system: {}", error_text),
+                message: format!("Failed to restart system: {error_text}"),
                 data: None,
                 timestamp: chrono::Utc::now(),
             }
@@ -303,7 +303,7 @@ impl AxeOsClient {
                 .unwrap_or_else(|_| "Unknown error".to_string());
             CommandResult {
                 success: false,
-                message: format!("Failed to update firmware: {}", error_text),
+                message: format!("Failed to update firmware: {error_text}"),
                 data: None,
                 timestamp: chrono::Utc::now(),
             }
@@ -342,7 +342,7 @@ impl AxeOsClient {
                 .unwrap_or_else(|_| "Unknown error".to_string());
             CommandResult {
                 success: false,
-                message: format!("Failed to update AxeOS: {}", error_text),
+                message: format!("Failed to update AxeOS: {error_text}"),
                 data: None,
                 timestamp: chrono::Utc::now(),
             }

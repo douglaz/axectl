@@ -6,7 +6,7 @@ use crate::output::{
     ColoredTemperature, format_hashrate, format_power, format_table, format_uptime, print_info,
     print_json, print_success, print_warning,
 };
-use anyhow::Result;
+use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use crossterm::{
     cursor::{Hide, MoveTo, Show},
@@ -575,24 +575,31 @@ async fn display_results(
     match config.format {
         OutputFormat::Json => {
             let devices_with_stats: Vec<serde_json::Value> = if config.no_stats {
-                devices
-                    .iter()
-                    .map(|d| serde_json::to_value(d).expect("Device should be serializable"))
-                    .collect()
+                let mut serialized_devices = Vec::new();
+                for d in devices.iter() {
+                    let value = serde_json::to_value(d).with_context(|| {
+                        format!("Failed to serialize device {name}", name = d.name)
+                    })?;
+                    serialized_devices.push(value);
+                }
+                serialized_devices
             } else {
-                devices
-                    .iter()
-                    .zip(device_stats.iter())
-                    .map(|(device, stats)| {
-                        let mut device_json =
-                            serde_json::to_value(device).expect("Device should be serializable");
-                        if let Some(stats) = stats {
-                            device_json["stats"] = serde_json::to_value(stats)
-                                .expect("DeviceStats should be serializable");
-                        }
-                        device_json
-                    })
-                    .collect()
+                let mut serialized_devices = Vec::new();
+                for (device, stats) in devices.iter().zip(device_stats.iter()) {
+                    let mut device_json = serde_json::to_value(device).with_context(|| {
+                        format!("Failed to serialize device {name}", name = device.name)
+                    })?;
+                    if let Some(stats) = stats {
+                        device_json["stats"] = serde_json::to_value(stats).with_context(|| {
+                            format!(
+                                "Failed to serialize stats for device {name}",
+                                name = device.name
+                            )
+                        })?;
+                    }
+                    serialized_devices.push(device_json);
+                }
+                serialized_devices
             };
 
             // Calculate swarm summary
