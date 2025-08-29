@@ -1,10 +1,10 @@
 use crate::api::{Device, DeviceStats, DeviceStatus, SwarmSummary};
-use crate::cache::{get_cache_dir, DeviceCache};
+use crate::cache::{DeviceCache, get_cache_dir};
 use crate::cli::commands::handlers::discovery::perform_discovery;
 use crate::cli::commands::{DeviceFilterArg, OutputFormat};
 use crate::output::{
-    format_hashrate, format_power, format_table, format_uptime, print_info, print_json,
-    print_success, print_warning, ColoredTemperature,
+    ColoredTemperature, format_hashrate, format_power, format_table, format_uptime, print_info,
+    print_json, print_success, print_warning,
 };
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -15,13 +15,13 @@ use crossterm::{
 };
 use futures::future::join_all;
 use std::collections::HashMap;
-use std::io::{stdout, Write as IoWrite};
+use std::io::{Write as IoWrite, stdout};
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tabled::Tabled;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{RwLock, mpsc};
 use tokio::time::{interval, timeout};
 
 /// Shared state for the monitor
@@ -458,19 +458,20 @@ async fn update_and_display(
             match result {
                 Ok(Ok(stats)) => {
                     // Check for alerts
-                    if let Some(temp_threshold) = config.temp_alert {
-                        if stats.temperature_celsius > temp_threshold {
-                            if let Some(device) = state_guard.devices.get(&ip) {
-                                alerts.push(Alert {
-                                    timestamp: Utc::now(),
-                                    message: format!(
-                                        "🌡️ {name} temperature alert: {temp:.1}°C > {threshold:.1}°C",
-                                        name = device.name, temp = stats.temperature_celsius, threshold = temp_threshold
-                                    ),
-                                    device_ip: ip.clone(),
-                                });
-                            }
-                        }
+                    if let Some(temp_threshold) = config.temp_alert
+                        && stats.temperature_celsius > temp_threshold
+                        && let Some(device) = state_guard.devices.get(&ip)
+                    {
+                        alerts.push(Alert {
+                            timestamp: Utc::now(),
+                            message: format!(
+                                "🌡️ {name} temperature alert: {temp:.1}°C > {threshold:.1}°C",
+                                name = device.name,
+                                temp = stats.temperature_celsius,
+                                threshold = temp_threshold
+                            ),
+                            device_ip: ip.clone(),
+                        });
                     }
 
                     if let Some(hashrate_threshold) = config.hashrate_alert {
@@ -478,20 +479,20 @@ async fn update_and_display(
                             let drop_percent = ((previous_hashrate - stats.hashrate_mhs)
                                 / previous_hashrate)
                                 * 100.0;
-                            if drop_percent > hashrate_threshold {
-                                if let Some(device) = state_guard.devices.get(&ip) {
-                                    alerts.push(Alert {
-                                        timestamp: Utc::now(),
-                                        message: format!(
-                                            "📉 {name} hashrate drop: {drop:.1}% ({prev} -> {curr})",
-                                            name = device.name,
-                                            drop = drop_percent,
-                                            prev = format_hashrate(*previous_hashrate),
-                                            curr = format_hashrate(stats.hashrate_mhs)
-                                        ),
-                                        device_ip: ip.clone(),
-                                    });
-                                }
+                            if drop_percent > hashrate_threshold
+                                && let Some(device) = state_guard.devices.get(&ip)
+                            {
+                                alerts.push(Alert {
+                                    timestamp: Utc::now(),
+                                    message: format!(
+                                        "📉 {name} hashrate drop: {drop:.1}% ({prev} -> {curr})",
+                                        name = device.name,
+                                        drop = drop_percent,
+                                        prev = format_hashrate(*previous_hashrate),
+                                        curr = format_hashrate(stats.hashrate_mhs)
+                                    ),
+                                    device_ip: ip.clone(),
+                                });
                             }
                         }
                         state_guard
@@ -773,7 +774,10 @@ async fn display_results(
             if config.type_summary && !config.no_stats {
                 writeln!(&mut output_buffer)?;
                 writeln!(&mut output_buffer, "📊 Device Type Summaries:")?;
-                writeln!(&mut output_buffer, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")?;
+                writeln!(
+                    &mut output_buffer,
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                )?;
 
                 let cache_guard = cache.read().await;
                 let type_summaries = cache_guard.get_type_summaries();

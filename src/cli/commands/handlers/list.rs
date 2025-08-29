@@ -6,7 +6,7 @@ use crossterm::{
     execute,
     terminal::{Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use std::io::{stdout, Write as IoWrite};
+use std::io::{Write as IoWrite, stdout};
 use std::path::Path;
 use std::time::Duration;
 use tabled::Tabled;
@@ -73,8 +73,8 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
     use crate::api::{DeviceStatus, SwarmSummary};
     use crate::cache::DeviceCache;
     use crate::output::{
-        format_hashrate, format_power, format_table, format_uptime, print_info, print_json,
-        print_success, print_warning, ColoredTemperature,
+        ColoredTemperature, format_hashrate, format_power, format_table, format_uptime, print_info,
+        print_json, print_success, print_warning,
     };
     use std::collections::HashMap;
 
@@ -232,13 +232,13 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
                             // Check for alerts if in watch mode
                             if args.watch {
                                 // Temperature alert
-                                if let Some(temp_threshold) = args.temp_alert {
-                                    if stats.temperature_celsius > temp_threshold {
-                                        alerts.push(format!(
-                                            "🌡️ {} temperature alert: {:.1}°C > {:.1}°C",
-                                            device.name, stats.temperature_celsius, temp_threshold
-                                        ));
-                                    }
+                                if let Some(temp_threshold) = args.temp_alert
+                                    && stats.temperature_celsius > temp_threshold
+                                {
+                                    alerts.push(format!(
+                                        "🌡️ {} temperature alert: {:.1}°C > {:.1}°C",
+                                        device.name, stats.temperature_celsius, temp_threshold
+                                    ));
                                 }
 
                                 // Hashrate drop alert
@@ -557,7 +557,10 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
                     } else if let Some(ref mut buffer) = output_buffer {
                         writeln!(buffer)?;
                         writeln!(buffer, "📊 Device Type Summaries:")?;
-                        writeln!(buffer, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")?;
+                        writeln!(
+                            buffer,
+                            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                        )?;
 
                         let type_summaries = cache.get_type_summaries();
                         if type_summaries.is_empty() {
@@ -586,7 +589,9 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
                     } else {
                         println!();
                         println!("📊 Device Type Summaries:");
-                        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                        println!(
+                            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                        );
 
                         let type_summaries = cache.get_type_summaries();
                         if type_summaries.is_empty() {
@@ -661,10 +666,11 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
         }
 
         // Save cache if we updated stats
-        if !args.no_stats && !device_stats.is_empty() {
-            if let Err(e) = cache.save(cache_path) {
-                tracing::warn!("Failed to save cache: {}", e);
-            }
+        if !args.no_stats
+            && !device_stats.is_empty()
+            && let Err(e) = cache.save(cache_path)
+        {
+            tracing::warn!("Failed to save cache: {}", e);
         }
 
         if !matches!(args.format, OutputFormat::Json) {

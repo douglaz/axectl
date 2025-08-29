@@ -489,21 +489,31 @@ mod tests {
         let discovery = MdnsDiscovery::new();
 
         // Verify default services include expected ones
-        assert!(discovery
-            .service_names
-            .contains(&"_http._tcp.local.".to_string()));
-        assert!(discovery
-            .service_names
-            .contains(&"_https._tcp.local.".to_string()));
-        assert!(discovery
-            .service_names
-            .contains(&"_axeos._tcp.local.".to_string()));
-        assert!(discovery
-            .service_names
-            .contains(&"_bitaxe._tcp.local.".to_string()));
-        assert!(discovery
-            .service_names
-            .contains(&"_nerdqaxe._tcp.local.".to_string()));
+        assert!(
+            discovery
+                .service_names
+                .contains(&"_http._tcp.local.".to_string())
+        );
+        assert!(
+            discovery
+                .service_names
+                .contains(&"_https._tcp.local.".to_string())
+        );
+        assert!(
+            discovery
+                .service_names
+                .contains(&"_axeos._tcp.local.".to_string())
+        );
+        assert!(
+            discovery
+                .service_names
+                .contains(&"_bitaxe._tcp.local.".to_string())
+        );
+        assert!(
+            discovery
+                .service_names
+                .contains(&"_nerdqaxe._tcp.local.".to_string())
+        );
         assert_eq!(discovery.service_names.len(), 5);
     }
 

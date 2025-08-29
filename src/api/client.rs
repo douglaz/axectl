@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use reqwest::{Client, ClientBuilder};
 use std::time::Duration;
 use url::Url;
@@ -490,9 +490,11 @@ mod tests {
 
         mock.assert_async().await;
         assert!(result.success);
-        assert!(result
-            .message
-            .contains("System settings updated successfully"));
+        assert!(
+            result
+                .message
+                .contains("System settings updated successfully")
+        );
     }
 
     #[tokio::test]

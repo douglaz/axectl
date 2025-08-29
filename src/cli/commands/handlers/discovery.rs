@@ -103,13 +103,11 @@ pub async fn perform_discovery(
             for ip in &known_ips {
                 if let Ok(Some(device)) =
                     scanner::probe_single_device(ip, Duration::from_millis(500)).await
-                {
-                    if !all_devices
+                    && !all_devices
                         .iter()
                         .any(|d| d.ip_address == device.ip_address)
-                    {
-                        all_devices.push(device);
-                    }
+                {
+                    all_devices.push(device);
                 }
             }
 

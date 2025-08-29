@@ -6,7 +6,7 @@ use crossterm::{
     terminal::{Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use std::collections::HashMap;
-use std::io::{stdout, Write as IoWrite};
+use std::io::{Write as IoWrite, stdout};
 use std::path::Path;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -151,13 +151,13 @@ pub async fn monitor(config: MonitorConfig<'_>) -> Result<()> {
             match collect_device_stats(device).await {
                 Ok(stats) => {
                     // Check for alerts
-                    if let Some(temp_threshold) = config.temp_alert {
-                        if stats.temperature_celsius > temp_threshold {
-                            alerts.push(format!(
-                                "🌡️ {} temperature alert: {:.1}°C > {:.1}°C",
-                                device.name, stats.temperature_celsius, temp_threshold
-                            ));
-                        }
+                    if let Some(temp_threshold) = config.temp_alert
+                        && stats.temperature_celsius > temp_threshold
+                    {
+                        alerts.push(format!(
+                            "🌡️ {} temperature alert: {:.1}°C > {:.1}°C",
+                            device.name, stats.temperature_celsius, temp_threshold
+                        ));
                     }
 
                     if let Some(hashrate_threshold) = config.hashrate_alert {
@@ -284,7 +284,7 @@ pub async fn monitor(config: MonitorConfig<'_>) -> Result<()> {
             }
             OutputFormat::Text => {
                 use crate::output::{
-                    format_hashrate, format_power, format_table, format_uptime, ColoredTemperature,
+                    ColoredTemperature, format_hashrate, format_power, format_table, format_uptime,
                 };
                 use std::fmt::Write as FmtWrite;
                 use tabled::Tabled;
@@ -383,7 +383,10 @@ pub async fn monitor(config: MonitorConfig<'_>) -> Result<()> {
                 if config.type_summary {
                     writeln!(&mut output_buffer)?;
                     writeln!(&mut output_buffer, "📊 Device Type Summaries:")?;
-                    writeln!(&mut output_buffer, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")?;
+                    writeln!(
+                        &mut output_buffer,
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                    )?;
 
                     let type_summaries = cache.get_type_summaries();
                     {
