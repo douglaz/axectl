@@ -228,7 +228,7 @@ pub struct TypeSummary {
 // API Response Models (matches AxeOS API)
 
 /// Unified device info for internal use - converted from device-specific responses
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemInfoResponse {
     pub asic_model: String,
     pub board_version: String,

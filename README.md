@@ -171,6 +171,9 @@ axectl monitor --format json > monitoring_log.json
 ### Device Control
 
 ```bash
+# Show current device configuration
+axectl control bitaxe-401 show-config
+
 # Set fan speed to 80%
 axectl control bitaxe-401 set-fan-speed 80
 
@@ -182,6 +185,45 @@ axectl control bitaxe-gamma wifi-scan
 
 # Update device settings
 axectl control bitaxe-401 update-settings '{"pool_url": "stratum+tcp://new.pool:4334"}'
+```
+
+### Bulk Operations
+
+Manage multiple devices at once with bulk commands:
+
+```bash
+# View configuration for all devices
+axectl bulk show-config --all
+
+# View configuration for specific device types
+axectl bulk show-config --device-type bitaxe-ultra
+
+# View configuration for specific devices
+axectl bulk show-config --ip-address 192.168.1.100 --ip-address 192.168.1.101
+
+# Check configuration before making bulk changes
+axectl bulk show-config --device-type bitaxe-ultra
+axectl bulk update-settings '{"frequency": 500}' --device-type bitaxe-ultra --force
+
+# Restart all devices of a specific type
+axectl bulk restart --device-type nerdqaxe-plus --force
+
+# Set fan speed for multiple devices
+axectl bulk set-fan-speed 80 --all --force
+
+# Update firmware on all devices (with parallel execution)
+axectl bulk update-firmware http://example.com/firmware.bin --all --parallel 5 --force
+```
+
+**Configuration Management Workflow:**
+```bash
+# 1. First, check current settings across your fleet
+axectl bulk show-config --device-type bitaxe-ultra
+
+# 2. Review the configuration output
+# 3. Make informed decisions about what to change
+# 4. Apply updates with confidence
+axectl bulk update-settings '{"pool_url": "stratum+tcp://new.pool:4334"}' --device-type bitaxe-ultra --force
 ```
 
 ## 🔧 Advanced Usage
@@ -309,7 +351,8 @@ cargo fmt --check
 ## 📋 Roadmap
 
 - [ ] **Device Groups** - Organize devices into logical groups
-- [ ] **Bulk Operations** - Apply settings to multiple devices
+- [x] **Bulk Operations** - Apply settings to multiple devices
+- [x] **Configuration Viewing** - View current device configuration before changes
 - [ ] **Configuration Profiles** - Save and apply device configurations
 - [ ] **Alerting Integration** - Webhook/email notifications
 - [ ] **Historical Data** - SQLite storage for long-term analytics

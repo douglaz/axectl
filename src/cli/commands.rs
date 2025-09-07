@@ -216,6 +216,9 @@ pub enum ControlAction {
         /// AxeOS update URL or file path
         axeos: String,
     },
+
+    /// Show current device configuration
+    ShowConfig,
 }
 
 #[derive(Subcommand)]
@@ -325,6 +328,19 @@ pub enum BulkAction {
         /// Maximum parallel operations
         #[arg(long, default_value = "5")]
         parallel: usize,
+    },
+
+    /// Show configuration for selected devices
+    ShowConfig {
+        /// Filter by device type (can be specified multiple times)
+        #[arg(long = "device-type", value_name = "TYPE")]
+        device_types: Vec<DeviceType>,
+        /// Target specific IP addresses (can be specified multiple times)
+        #[arg(long = "ip-address", value_name = "IP")]
+        ip_addresses: Vec<String>,
+        /// Target all devices
+        #[arg(long)]
+        all: bool,
     },
 }
 
