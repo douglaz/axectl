@@ -20,31 +20,9 @@ use crate::api::models::DeviceFilter;
 use crate::cache::{DeviceCache, get_cache_dir};
 
 /// Configuration for the MCP server
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct McpServerConfig {
-    pub transport: Transport,
-    #[allow(dead_code)] // Will be used when SSE transport is implemented
-    pub host: String,
-    #[allow(dead_code)] // Will be used when SSE transport is implemented
-    pub port: u16,
     pub cache_dir: Option<std::path::PathBuf>,
-}
-
-#[derive(Debug, Clone)]
-pub enum Transport {
-    Stdio,
-    Sse,
-}
-
-impl Default for McpServerConfig {
-    fn default() -> Self {
-        Self {
-            transport: Transport::Stdio,
-            host: "127.0.0.1".to_string(),
-            port: 8080,
-            cache_dir: None,
-        }
-    }
 }
 
 /// The main MCP server for axectl
@@ -164,22 +142,11 @@ impl AxectlMcpServer {
         // Initialize tracing only if not in test mode
         let log_level = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
         if log_level != "error" {
-            info!("Starting axectl MCP server");
+            info!("Starting axectl MCP server with stdio transport");
         }
 
-        match self.config.transport {
-            Transport::Stdio => {
-                if log_level != "error" {
-                    info!("Starting MCP server with stdio transport");
-                }
-                let service = self.serve(stdio()).await?;
-                service.waiting().await?;
-            }
-            Transport::Sse => {
-                // SSE transport would require additional implementation
-                anyhow::bail!("SSE transport not yet implemented");
-            }
-        }
+        let service = self.serve(stdio()).await?;
+        service.waiting().await?;
 
         Ok(())
     }

@@ -129,8 +129,8 @@ axectl includes an MCP server that allows AI assistants to interact with your mi
 
 Start the MCP server:
 ```bash
-# Run MCP server with stdio transport (for AI assistant integration)
-axectl mcp-server -t stdio
+# Run MCP server (uses stdio transport for AI assistant integration)
+axectl mcp-server
 ```
 
 Available MCP tools:
