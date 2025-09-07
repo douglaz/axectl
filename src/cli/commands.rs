@@ -36,6 +36,15 @@ pub enum OutputFormat {
     Json,
 }
 
+#[cfg(feature = "mcp")]
+#[derive(Clone, Copy, ValueEnum, PartialEq)]
+pub enum McpTransport {
+    /// Use standard input/output for communication
+    Stdio,
+    /// Use Server-Sent Events (SSE) over HTTP
+    Sse,
+}
+
 /// Wrapper type for device filtering in CLI that can parse both
 /// specific device types (bitaxe-ultra, nerdqaxe-plus) and
 /// group filters (bitaxe, nerdqaxe, all)
@@ -185,6 +194,14 @@ pub enum Commands {
     Bulk {
         #[command(subcommand)]
         action: BulkAction,
+    },
+
+    /// Start MCP (Model Context Protocol) server for AI assistant integration
+    #[cfg(feature = "mcp")]
+    McpServer {
+        /// Transport type for MCP server
+        #[arg(long, short = 't', value_enum, default_value = "stdio")]
+        transport: McpTransport,
     },
 }
 
@@ -470,6 +487,22 @@ impl Cli {
                     self.cache_dir.as_deref(),
                 )
                 .await
+            }
+            #[cfg(feature = "mcp")]
+            Commands::McpServer { transport } => {
+                use crate::mcp_server::{McpServerConfig, Transport, start_mcp_server};
+
+                let config = McpServerConfig {
+                    transport: match transport {
+                        McpTransport::Stdio => Transport::Stdio,
+                        McpTransport::Sse => Transport::Sse,
+                    },
+                    host: "127.0.0.1".to_string(),
+                    port: 8080,
+                    cache_dir: self.cache_dir,
+                };
+
+                start_mcp_server(config).await
             }
         }
     }
