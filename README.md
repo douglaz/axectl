@@ -201,6 +201,13 @@ axectl bulk show-config --device-type bitaxe-ultra
 # View configuration for specific devices
 axectl bulk show-config --ip-address 192.168.1.100 --ip-address 192.168.1.101
 
+# Update bitcoin address across all devices (automatically appends hostname)
+axectl bulk update-bitcoin-address bc1qnewaddress --all --force
+# Result: Each device's pool_user becomes "bc1qnewaddress.hostname"
+
+# Update bitcoin address for specific device type
+axectl bulk update-bitcoin-address bc1qnewaddress --device-type bitaxe-gamma --force
+
 # Check configuration before making bulk changes
 axectl bulk show-config --device-type bitaxe-ultra
 axectl bulk update-settings '{"frequency": 500}' --device-type bitaxe-ultra --force
@@ -213,6 +220,23 @@ axectl bulk set-fan-speed 80 --all --force
 
 # Update firmware on all devices (with parallel execution)
 axectl bulk update-firmware http://example.com/firmware.bin --all --parallel 5 --force
+```
+
+**Bitcoin Address Management:**
+```bash
+# The update-bitcoin-address command follows mining pool conventions
+# It automatically appends the device hostname to your bitcoin address
+# This ensures each device has a unique worker identifier
+
+# Example: Update all devices to a new bitcoin address
+axectl bulk update-bitcoin-address bc1qyouraddress --all --force
+
+# Result for each device:
+# Device "bitaxe" → pool_user = "bc1qyouraddress.bitaxe"
+# Device "nerdqaxe4" → pool_user = "bc1qyouraddress.nerdqaxe4"
+# Device "Bitaxe3" → pool_user = "bc1qyouraddress.Bitaxe3"
+
+# This convention is standard for mining pools to track individual workers
 ```
 
 **Configuration Management Workflow:**

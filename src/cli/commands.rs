@@ -342,6 +342,24 @@ pub enum BulkAction {
         #[arg(long)]
         all: bool,
     },
+
+    /// Update bitcoin address for selected devices (automatically appends hostname)
+    UpdateBitcoinAddress {
+        /// Bitcoin address to set (hostname will be appended automatically)
+        bitcoin_address: String,
+        /// Filter by device type (can be specified multiple times)
+        #[arg(long = "device-type", value_name = "TYPE")]
+        device_types: Vec<DeviceType>,
+        /// Target specific IP addresses (can be specified multiple times)
+        #[arg(long = "ip-address", value_name = "IP")]
+        ip_addresses: Vec<String>,
+        /// Target all devices
+        #[arg(long)]
+        all: bool,
+        /// Skip confirmation prompt
+        #[arg(long)]
+        force: bool,
+    },
 }
 
 impl Cli {
