@@ -13,7 +13,6 @@ use rmcp::{
 };
 use serde::Deserialize;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use tracing::info;
 
 use crate::api::client::AxeOsClient;
@@ -52,14 +51,6 @@ impl Default for McpServerConfig {
 #[derive(Clone)]
 pub struct AxectlMcpServer {
     config: McpServerConfig,
-    #[allow(dead_code)] // Will be used for caching state between calls
-    state: Arc<Mutex<ServerState>>,
-}
-
-#[derive(Default)]
-struct ServerState {
-    #[allow(dead_code)] // Will be used for caching discovered devices
-    discovered_devices: Vec<crate::api::models::Device>,
 }
 
 // Request structures for tools
@@ -165,10 +156,7 @@ pub async fn start_mcp_server(config: McpServerConfig) -> Result<()> {
 
 impl AxectlMcpServer {
     pub fn new(config: McpServerConfig) -> Self {
-        Self {
-            config,
-            state: Arc::new(Mutex::new(ServerState::default())),
-        }
+        Self { config }
     }
 
     /// Start the MCP server
@@ -197,7 +185,7 @@ impl AxectlMcpServer {
     }
 
     // Helper method to get device from cache
-    #[allow(dead_code)] // Used by tool implementations
+    #[allow(dead_code)] // Actually used by multiple tool implementations but compiler doesn't detect it
     async fn get_device_from_cache(&self, device_id: &str) -> Result<crate::api::models::Device> {
         let cache_dir = get_cache_dir(self.config.cache_dir.as_deref())?;
         let cache = DeviceCache::load(cache_dir.as_ref()).unwrap_or_default();
@@ -233,10 +221,6 @@ impl AxectlMcpServer {
         .await
         {
             Ok(devices) => {
-                // Update state with discovered devices
-                let mut state = self.state.lock().await;
-                state.discovered_devices = devices.clone();
-
                 let result = serde_json::json!({
                     "devices": devices,
                     "count": devices.len(),
