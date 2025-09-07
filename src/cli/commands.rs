@@ -186,6 +186,10 @@ pub enum Commands {
         #[command(subcommand)]
         action: BulkAction,
     },
+
+    /// Start MCP (Model Context Protocol) server for AI assistant integration
+    #[cfg(feature = "mcp")]
+    McpServer,
 }
 
 #[derive(Subcommand)]
@@ -470,6 +474,16 @@ impl Cli {
                     self.cache_dir.as_deref(),
                 )
                 .await
+            }
+            #[cfg(feature = "mcp")]
+            Commands::McpServer => {
+                use crate::mcp_server::{McpServerConfig, start_mcp_server};
+
+                let config = McpServerConfig {
+                    cache_dir: self.cache_dir,
+                };
+
+                start_mcp_server(config).await
             }
         }
     }

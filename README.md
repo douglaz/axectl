@@ -119,6 +119,33 @@ The Bitcoin mining management landscape offers various solutions for different n
 - **Scriptable interface** following Unix tool conventions
 - **Error handling** with proper exit codes
 
+### 🤖 MCP Server (Model Context Protocol)
+axectl includes an MCP server that allows AI assistants to interact with your mining devices:
+
+- **AI Integration**: Use with Claude, ChatGPT, or other AI assistants that support MCP
+- **Full API Access**: All axectl functionality exposed through standardized protocol
+- **Type-Safe Tools**: JSON Schema validation for all operations
+- **Async Operations**: Efficient handling of multiple device operations
+
+Start the MCP server:
+```bash
+# Run MCP server (uses stdio transport for AI assistant integration)
+axectl mcp-server
+```
+
+Available MCP tools:
+- `discover_devices` - Find miners on the network
+- `list_devices` - List known devices with statistics
+- `get_device_stats` - Get detailed device statistics
+- `get_device_config` - Retrieve device configuration
+- `set_fan_speed` - Control fan speed
+- `restart_device` - Restart a device
+- `update_settings` - Update device settings
+- `wifi_scan` - Scan for WiFi networks
+- `bulk_restart` - Restart multiple devices
+- `bulk_set_fan_speed` - Set fan speed on multiple devices
+- `bulk_update_bitcoin_address` - Update Bitcoin address on multiple devices
+
 ## 📖 Usage Guide
 
 ### Discovery

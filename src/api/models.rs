@@ -250,7 +250,7 @@ pub struct SystemInfoResponse {
 }
 
 /// Unified device stats for internal use - converted from device-specific responses
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemStatsResponse {
     pub hashrate: f64,
     pub temp: f64,
