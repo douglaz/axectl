@@ -84,6 +84,12 @@ pub async fn bulk(
             device_types,
             ip_addresses,
             all,
+        }
+        | BulkAction::UpdateBitcoinAddress {
+            device_types,
+            ip_addresses,
+            all,
+            ..
         } => filter_devices(&cache, device_types, ip_addresses, *all)?,
     };
 
@@ -114,7 +120,8 @@ pub async fn bulk(
         | BulkAction::SetFanSpeed { force, .. }
         | BulkAction::UpdateSettings { force, .. }
         | BulkAction::UpdateFirmware { force, .. }
-        | BulkAction::UpdateAxeOs { force, .. } => *force,
+        | BulkAction::UpdateAxeOs { force, .. }
+        | BulkAction::UpdateBitcoinAddress { force, .. } => *force,
         BulkAction::WifiScan { .. } | BulkAction::ShowConfig { .. } => true, // WifiScan and ShowConfig don't need confirmation
     };
 
@@ -165,6 +172,9 @@ pub async fn bulk(
             axeos, parallel, ..
         } => execute_update_axeos(&target_devices, &axeos, parallel, format, color).await,
         BulkAction::ShowConfig { .. } => execute_show_config(&target_devices, format, color).await,
+        BulkAction::UpdateBitcoinAddress {
+            bitcoin_address, ..
+        } => execute_update_bitcoin_address(&target_devices, &bitcoin_address, format, color).await,
     }
 }
 
@@ -734,6 +744,134 @@ async fn execute_show_config(devices: &[Device], format: OutputFormat, color: bo
             &format!("Fetched configuration for {} device(s)", configs.len()),
             color,
         );
+    }
+
+    Ok(())
+}
+
+/// Execute bitcoin address update on all target devices
+async fn execute_update_bitcoin_address(
+    devices: &[Device],
+    bitcoin_address: &str,
+    format: OutputFormat,
+    color: bool,
+) -> Result<()> {
+    if format == OutputFormat::Text {
+        print_info(
+            &format!(
+                "Updating bitcoin address to '{}' on {} device(s)...",
+                bitcoin_address,
+                devices.len()
+            ),
+            color,
+        );
+        print_info(
+            "Note: Pool user will be set to '<bitcoin_address>.<hostname>' for each device",
+            color,
+        );
+    }
+
+    let mut results = Vec::new();
+    let mut successful_updates = Vec::new();
+
+    for device in devices {
+        let client = AxeOsClient::new(&device.ip_address)?;
+
+        // First, get the device's current configuration to get the hostname
+        match client.get_system_info().await {
+            Ok(system_info) => {
+                // Construct the pool_user with bitcoin_address.hostname format
+                let pool_user = format!("{}.{}", bitcoin_address, system_info.hostname);
+
+                // Create update request with only pool_user field
+                let update_request = SystemUpdateRequest {
+                    pool_user: Some(pool_user.clone()),
+                    ..Default::default()
+                };
+
+                // Send the update
+                match client.update_system(update_request).await {
+                    Ok(_) => {
+                        if format == OutputFormat::Text {
+                            print_success(
+                                &format!("✓ {} updated: pool_user = '{}'", device.name, pool_user),
+                                color,
+                            );
+                        }
+
+                        successful_updates.push(serde_json::json!({
+                            "device": device.name,
+                            "hostname": system_info.hostname,
+                            "pool_user": pool_user,
+                        }));
+
+                        results.push(serde_json::json!({
+                            "device": device.name,
+                            "ip": device.ip_address,
+                            "success": true,
+                            "pool_user": pool_user,
+                            "error": null
+                        }));
+                    }
+                    Err(e) => {
+                        if format == OutputFormat::Text {
+                            print_error(&format!("✗ {} update failed: {}", device.name, e), color);
+                        }
+
+                        results.push(serde_json::json!({
+                            "device": device.name,
+                            "ip": device.ip_address,
+                            "success": false,
+                            "pool_user": null,
+                            "error": e.to_string()
+                        }));
+                    }
+                }
+            }
+            Err(e) => {
+                if format == OutputFormat::Text {
+                    print_error(
+                        &format!("✗ {} failed to get configuration: {}", device.name, e),
+                        color,
+                    );
+                }
+
+                results.push(serde_json::json!({
+                    "device": device.name,
+                    "ip": device.ip_address,
+                    "success": false,
+                    "pool_user": null,
+                    "error": format!("Failed to get device configuration: {}", e)
+                }));
+            }
+        }
+    }
+
+    if format == OutputFormat::Json {
+        let output = serde_json::json!({
+            "action": "update_bitcoin_address",
+            "bitcoin_address": bitcoin_address,
+            "total_devices": devices.len(),
+            "successful": successful_updates.len(),
+            "results": results,
+            "updates": successful_updates,
+            "timestamp": chrono::Utc::now()
+        });
+        print_json(&output, true)?;
+    } else {
+        println!("\n───────────────────────────────────");
+        if !successful_updates.is_empty() {
+            print_success(
+                &format!(
+                    "Successfully updated {} of {} device(s)",
+                    successful_updates.len(),
+                    devices.len()
+                ),
+                color,
+            );
+        } else {
+            print_error("No devices were updated", color);
+        }
     }
 
     Ok(())
