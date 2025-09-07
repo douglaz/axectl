@@ -120,6 +120,20 @@ pub async fn control(
             );
             client.update_axeos(&axeos).await
         }
+        ControlAction::ShowConfig => {
+            // Get the full system info which contains all configuration
+            let system_info = client.get_system_info().await?;
+
+            // Create a command result with the configuration data
+            Ok(crate::api::CommandResult {
+                success: true,
+                message: format!("Configuration for {}", device_info.name),
+                data: Some(
+                    serde_json::to_value(&system_info).context("Failed to serialize config")?,
+                ),
+                timestamp: chrono::Utc::now(),
+            })
+        }
     };
 
     match result {
@@ -130,20 +144,74 @@ pub async fn control(
             OutputFormat::Text => {
                 if command_result.success {
                     print_success(&command_result.message, color);
-                    if let Some(data) = &command_result.data
-                        && let Some(networks) = data.get("networks")
-                    {
-                        println!("WiFi Networks:");
-                        if let Some(networks_array) = networks.as_array() {
-                            for network in networks_array {
-                                if let (Some(ssid), Some(rssi)) =
-                                    (network.get("ssid"), network.get("rssi"))
-                                {
-                                    println!(
-                                        "  {} ({}dBm)",
-                                        ssid.as_str().unwrap_or("Unknown"),
-                                        rssi.as_i64().unwrap_or(0)
-                                    );
+
+                    // Special handling for configuration display
+                    if let Some(data) = &command_result.data {
+                        // Check if this is a configuration response
+                        if data.get("hostname").is_some() && data.get("pool_url").is_some() {
+                            println!("\n📋 Device Configuration:");
+                            println!("────────────────────────");
+
+                            // Device Info
+                            println!("📱 Device Info:");
+                            if let Some(hostname) = data.get("hostname") {
+                                println!("  Hostname:    {}", hostname.as_str().unwrap_or("-"));
+                            }
+                            if let Some(fw) = data.get("firmware_version") {
+                                println!("  Firmware:    {}", fw.as_str().unwrap_or("-"));
+                            }
+                            if let Some(model) = data.get("asic_model") {
+                                println!("  ASIC Model:  {}", model.as_str().unwrap_or("-"));
+                            }
+
+                            // Network
+                            println!("\n🌐 Network:");
+                            if let Some(ssid) = data.get("wifi_ssid") {
+                                println!("  WiFi SSID:   {}", ssid.as_str().unwrap_or("-"));
+                            }
+                            if let Some(status) = data.get("wifi_status") {
+                                println!("  WiFi Status: {}", status.as_str().unwrap_or("-"));
+                            }
+
+                            // Pool Configuration
+                            println!("\n⛏️  Mining Pool:");
+                            if let Some(url) = data.get("pool_url") {
+                                println!("  URL:         {}", url.as_str().unwrap_or("-"));
+                            }
+                            if let Some(port) = data.get("pool_port") {
+                                println!("  Port:        {}", port);
+                            }
+                            if let Some(user) = data.get("pool_user") {
+                                println!("  User:        {}", user.as_str().unwrap_or("-"));
+                            }
+
+                            // Hardware Settings
+                            println!("\n⚙️  Hardware Settings:");
+                            if let Some(freq) = data.get("frequency") {
+                                println!("  Frequency:   {} MHz", freq);
+                            }
+                            if let Some(volt) = data.get("voltage") {
+                                println!("  Voltage:     {} mV", volt);
+                            }
+                            if let Some(fan) = data.get("fanspeed") {
+                                println!("  Fan Speed:   {} RPM", fan);
+                            }
+                            println!("────────────────────────");
+                        }
+                        // WiFi scan results
+                        else if let Some(networks) = data.get("networks") {
+                            println!("WiFi Networks:");
+                            if let Some(networks_array) = networks.as_array() {
+                                for network in networks_array {
+                                    if let (Some(ssid), Some(rssi)) =
+                                        (network.get("ssid"), network.get("rssi"))
+                                    {
+                                        println!(
+                                            "  {} ({}dBm)",
+                                            ssid.as_str().unwrap_or("Unknown"),
+                                            rssi.as_i64().unwrap_or(0)
+                                        );
+                                    }
                                 }
                             }
                         }

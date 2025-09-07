@@ -79,6 +79,11 @@ pub async fn bulk(
             ip_addresses,
             all,
             ..
+        }
+        | BulkAction::ShowConfig {
+            device_types,
+            ip_addresses,
+            all,
         } => filter_devices(&cache, device_types, ip_addresses, *all)?,
     };
 
@@ -110,7 +115,7 @@ pub async fn bulk(
         | BulkAction::UpdateSettings { force, .. }
         | BulkAction::UpdateFirmware { force, .. }
         | BulkAction::UpdateAxeOs { force, .. } => *force,
-        BulkAction::WifiScan { .. } => true, // WifiScan doesn't need confirmation
+        BulkAction::WifiScan { .. } | BulkAction::ShowConfig { .. } => true, // WifiScan and ShowConfig don't need confirmation
     };
 
     if !force && format == OutputFormat::Text {
@@ -159,6 +164,7 @@ pub async fn bulk(
         BulkAction::UpdateAxeOs {
             axeos, parallel, ..
         } => execute_update_axeos(&target_devices, &axeos, parallel, format, color).await,
+        BulkAction::ShowConfig { .. } => execute_show_config(&target_devices, format, color).await,
     }
 }
 
@@ -624,6 +630,110 @@ async fn execute_update_axeos(
             "timestamp": chrono::Utc::now()
         });
         print_json(&output, true)?;
+    }
+
+    Ok(())
+}
+
+/// Execute show config on all target devices
+async fn execute_show_config(devices: &[Device], format: OutputFormat, color: bool) -> Result<()> {
+    if format == OutputFormat::Text {
+        print_info(
+            &format!(
+                "Fetching configuration for {count} device(s)...",
+                count = devices.len()
+            ),
+            color,
+        );
+    }
+
+    let mut results = Vec::new();
+    let mut configs = Vec::new();
+
+    for device in devices {
+        let client = AxeOsClient::new(&device.ip_address)?;
+        let result = client.get_system_info().await;
+
+        match result {
+            Ok(config) => {
+                configs.push(serde_json::json!({
+                    "device": device.name,
+                    "ip": device.ip_address,
+                    "type": device.device_type.as_str(),
+                    "config": config,
+                }));
+
+                if format == OutputFormat::Text {
+                    // Print configuration for each device
+                    println!(
+                        "\n📋 Configuration for {} ({}):",
+                        device.name, device.ip_address
+                    );
+                    println!("───────────────────────────────────");
+
+                    // Device Info
+                    println!("  Hostname:    {}", config.hostname);
+                    println!("  Firmware:    {}", config.firmware_version);
+                    println!("  ASIC Model:  {}", config.asic_model);
+
+                    // Network
+                    println!(
+                        "  WiFi SSID:   {}",
+                        config.wifi_ssid.as_deref().unwrap_or("-")
+                    );
+                    println!(
+                        "  WiFi Status: {}",
+                        config.wifi_status.as_deref().unwrap_or("-")
+                    );
+
+                    // Pool
+                    println!("  Pool URL:    {}", config.pool_url);
+                    println!("  Pool Port:   {}", config.pool_port);
+                    println!("  Pool User:   {}", config.pool_user);
+
+                    // Hardware
+                    println!("  Frequency:   {} MHz", config.frequency);
+                    println!("  Voltage:     {} mV", config.voltage);
+                    println!("  Fan Speed:   {} RPM", config.fanspeed);
+                }
+
+                results.push(serde_json::json!({
+                    "device": device.name,
+                    "ip": device.ip_address,
+                    "success": true,
+                    "error": null
+                }));
+            }
+            Err(e) => {
+                if format == OutputFormat::Text {
+                    print_error(&format!("✗ {} failed: {}", device.name, e), color);
+                }
+
+                results.push(serde_json::json!({
+                    "device": device.name,
+                    "ip": device.ip_address,
+                    "success": false,
+                    "error": e.to_string()
+                }));
+            }
+        }
+    }
+
+    if format == OutputFormat::Json {
+        let output = serde_json::json!({
+            "action": "show_config",
+            "total_devices": devices.len(),
+            "configs": configs,
+            "results": results,
+            "timestamp": chrono::Utc::now()
+        });
+        print_json(&output, true)?;
+    } else if !configs.is_empty() {
+        println!("\n───────────────────────────────────");
+        print_success(
+            &format!("Fetched configuration for {} device(s)", configs.len()),
+            color,
+        );
     }
 
     Ok(())
