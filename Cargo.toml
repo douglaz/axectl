@@ -23,7 +23,7 @@ crossterm = "0.29"
 
 # Network
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
-mdns-sd = "0.14"
+mdns-sd = "0.15"
 ipnetwork = "0.21"
 local-ip-address = "0.6"
 url = "2"
