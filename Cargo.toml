@@ -23,7 +23,7 @@ crossterm = "0.29"
 
 # Network
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
-mdns-sd = "0.14"
+mdns-sd = "0.15"
 ipnetwork = "0.21"
 local-ip-address = "0.6"
 url = "2"
@@ -33,7 +33,7 @@ flume = "0.11"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }
 ctrlc = "3"
-dirs = "5"
+dirs = "6"
 
 
 # Logging
@@ -42,7 +42,7 @@ tracing-subscriber = "0.3.20"
 
 # MCP Server
 rmcp = { version = "0.6.3", features = ["server", "transport-io"], optional = true }
-schemars = { version = "0.8", optional = true }
+schemars = { version = "1.0", optional = true }
 
 [dev-dependencies]
 rmcp = { version = "0.6.3", features = ["server", "client", "transport-child-process"] }

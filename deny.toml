@@ -14,6 +14,8 @@ targets = [
 ignore = [
     # proc-macro-error unmaintained warning - from tabled dependency
     "RUSTSEC-2024-0370",
+    # paste unmaintained warning - from rmcp dependency  
+    "RUSTSEC-2024-0436",
 ]
 
 [licenses]

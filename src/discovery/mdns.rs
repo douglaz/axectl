@@ -125,9 +125,17 @@ impl MdnsDiscovery {
             ServiceEvent::ServiceResolved(info) => {
                 let device = MdnsDevice {
                     hostname: info.get_hostname().to_string(),
-                    ip_addresses: info.get_addresses().iter().copied().collect(),
+                    ip_addresses: info
+                        .get_addresses()
+                        .iter()
+                        .filter_map(|scoped_ip| {
+                            // Convert ScopedIp to IpAddr via string parsing
+                            // ScopedIp's Display implementation outputs a valid IP address string
+                            scoped_ip.to_string().parse::<IpAddr>().ok()
+                        })
+                        .collect(),
                     port: info.get_port(),
-                    service_type: info.get_type().to_string(),
+                    service_type: info.get_fullname().to_string(),
                     txt_records: info
                         .get_properties()
                         .iter()
