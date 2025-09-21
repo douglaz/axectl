@@ -42,7 +42,7 @@ pub async fn control(
         return Ok(());
     };
 
-    let client = AxeOsClient::with_timeout(&device_info.ip_address, Duration::from_secs(10))?;
+    let client = AxeOsClient::with_timeout(&device_info.ip_address, Duration::from_secs(60))?;
 
     let result = match action {
         ControlAction::SetFanSpeed { speed } => {
