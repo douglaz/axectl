@@ -6,6 +6,7 @@ use crate::output::{
     ColoredTemperature, format_hashrate, format_power, format_table, format_uptime, print_info,
     print_json, print_success, print_warning,
 };
+use alphanumeric_sort::compare_str;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use crossterm::{
@@ -440,7 +441,7 @@ async fn update_and_display(
                 let device_clone = device.clone();
                 async move {
                     let result =
-                        timeout(Duration::from_secs(5), collect_device_stats(&device_clone)).await;
+                        timeout(Duration::from_secs(60), collect_device_stats(&device_clone)).await;
 
                     (device_clone.ip_address.clone(), result)
                 }
@@ -682,7 +683,11 @@ async fn display_results(
 
             if config.no_stats {
                 // Basic table without stats
-                let table_rows: Vec<BasicMonitorTableRow> = devices
+                // Sort devices by hostname using natural/alphanumeric sorting
+                let mut sorted_devices: Vec<_> = devices.iter().collect();
+                sorted_devices.sort_by(|a, b| compare_str(&a.name, &b.name));
+
+                let table_rows: Vec<BasicMonitorTableRow> = sorted_devices
                     .iter()
                     .map(|device| BasicMonitorTableRow {
                         name: device.name.clone(),
@@ -700,7 +705,11 @@ async fn display_results(
                 )?;
             } else {
                 // Full table with stats
-                let table_rows: Vec<MonitorTableRow> = devices
+                // Sort devices by hostname using natural/alphanumeric sorting
+                let mut sorted_devices: Vec<_> = devices.iter().collect();
+                sorted_devices.sort_by(|a, b| compare_str(&a.name, &b.name));
+
+                let table_rows: Vec<MonitorTableRow> = sorted_devices
                     .iter()
                     .map(|device| {
                         if let Some(ref stats) = device.stats {
@@ -846,7 +855,8 @@ async fn display_results(
 }
 
 async fn collect_device_stats(device: &Device) -> Result<DeviceStats> {
-    let client = crate::api::AxeOsClient::with_timeout(&device.ip_address, Duration::from_secs(5))?;
+    let client =
+        crate::api::AxeOsClient::with_timeout(&device.ip_address, Duration::from_secs(60))?;
     let (info, stats) = client.get_complete_info().await?;
     Ok(DeviceStats::from_api_responses(&info, &stats))
 }
