@@ -446,7 +446,8 @@ pub async fn monitor(config: MonitorConfig<'_>) -> Result<()> {
 }
 
 async fn collect_device_stats(device: &crate::api::Device) -> Result<crate::api::DeviceStats> {
-    let client = crate::api::AxeOsClient::with_timeout(&device.ip_address, Duration::from_secs(5))?;
+    let client =
+        crate::api::AxeOsClient::with_timeout(&device.ip_address, Duration::from_secs(60))?;
     let (info, stats) = client.get_complete_info().await?;
     Ok(crate::api::DeviceStats::from_api_responses(&info, &stats))
 }

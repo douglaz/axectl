@@ -1,16 +1,18 @@
 use crate::cache::get_cache_dir;
 use crate::cli::commands::{DeviceFilterArg, OutputFormat};
+use alphanumeric_sort::compare_str;
 use anyhow::{Context, Result};
 use crossterm::{
     cursor::{Hide, MoveTo, Show},
     execute,
     terminal::{Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use futures::future::join_all;
 use std::io::{Write as IoWrite, stdout};
 use std::path::Path;
 use std::time::Duration;
 use tabled::Tabled;
-use tokio::time::sleep;
+use tokio::time::{sleep, timeout};
 
 /// Arguments for the list command
 pub struct ListArgs<'a> {
@@ -225,69 +227,121 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
         let mut alerts = Vec::new();
 
         if !args.no_stats {
-            for device in &devices {
-                if device.status == DeviceStatus::Online {
-                    match collect_device_stats(device).await {
-                        Ok(stats) => {
-                            // Check for alerts if in watch mode
-                            if args.watch {
-                                // Temperature alert
-                                if let Some(temp_threshold) = args.temp_alert
-                                    && stats.temperature_celsius > temp_threshold
-                                {
-                                    alerts.push(format!(
-                                        "🌡️ {} temperature alert: {:.1}°C > {:.1}°C",
-                                        device.name, stats.temperature_celsius, temp_threshold
-                                    ));
-                                }
+            // Create futures for parallel stats collection
+            let stats_futures: Vec<_> = devices
+                .iter()
+                .map(|device| {
+                    let device_clone = device.clone();
+                    let watch = args.watch;
+                    let temp_alert = args.temp_alert;
+                    let hashrate_alert = args.hashrate_alert;
+                    let prev_hashrates = previous_hashrates.clone();
 
-                                // Hashrate drop alert
-                                if let Some(hashrate_threshold) = args.hashrate_alert {
-                                    if let Some(previous_hashrate) =
-                                        previous_hashrates.get(&device.ip_address)
+                    async move {
+                        if device_clone.status != DeviceStatus::Online {
+                            return (device_clone, None, Vec::new());
+                        }
+
+                        // Use timeout to prevent indefinite waiting (60s for patient timeout)
+                        let result =
+                            timeout(Duration::from_secs(60), collect_device_stats(&device_clone))
+                                .await;
+
+                        let mut local_alerts = Vec::new();
+
+                        match result {
+                            Ok(Ok(stats)) => {
+                                // Check for alerts if in watch mode
+                                if watch {
+                                    // Temperature alert
+                                    if let Some(temp_threshold) = temp_alert
+                                        && stats.temperature_celsius > temp_threshold
+                                    {
+                                        local_alerts.push(format!(
+                                            "🌡️ {} temperature alert: {:.1}°C > {:.1}°C",
+                                            device_clone.name,
+                                            stats.temperature_celsius,
+                                            temp_threshold
+                                        ));
+                                    }
+
+                                    // Hashrate drop alert
+                                    if let Some(hashrate_threshold) = hashrate_alert
+                                        && let Some(previous_hashrate) =
+                                            prev_hashrates.get(&device_clone.ip_address)
                                     {
                                         let drop_percent = ((previous_hashrate
                                             - stats.hashrate_mhs)
                                             / previous_hashrate)
                                             * 100.0;
                                         if drop_percent > hashrate_threshold {
-                                            alerts.push(format!(
+                                            local_alerts.push(format!(
                                                 "📉 {} hashrate drop: {:.1}% ({} -> {})",
-                                                device.name,
+                                                device_clone.name,
                                                 drop_percent,
                                                 format_hashrate(*previous_hashrate),
                                                 format_hashrate(stats.hashrate_mhs)
                                             ));
                                         }
                                     }
-                                    previous_hashrates
-                                        .insert(device.ip_address.clone(), stats.hashrate_mhs);
                                 }
+
+                                (device_clone, Some(stats), local_alerts)
                             }
+                            Ok(Err(e)) => {
+                                tracing::warn!(
+                                    "Failed to collect stats from {}: {}",
+                                    device_clone.ip_address,
+                                    e
+                                );
 
-                            // Update stats in cache
-                            cache.update_device_stats(&device.ip_address, stats.clone());
-                            device_stats.push(Some(stats));
-                        }
-                        Err(e) => {
-                            tracing::warn!(
-                                "Failed to collect stats from {}: {}",
-                                device.ip_address,
-                                e
-                            );
-                            // Mark device as offline in cache
-                            cache.mark_device_probed(&device.ip_address, false);
-                            device_stats.push(None);
+                                // Add offline alert if in watch mode
+                                if watch {
+                                    local_alerts
+                                        .push(format!("🔌 {} went offline", device_clone.name));
+                                }
 
-                            // Add offline alert if in watch mode
-                            if args.watch {
-                                alerts.push(format!("🔌 {} went offline", device.name));
+                                (device_clone, None, local_alerts)
+                            }
+                            Err(_) => {
+                                tracing::warn!(
+                                    "Timeout collecting stats from {} (60s)",
+                                    device_clone.ip_address
+                                );
+
+                                // Add timeout alert if in watch mode
+                                if watch {
+                                    local_alerts
+                                        .push(format!("⏱️ {} timeout (60s)", device_clone.name));
+                                }
+
+                                (device_clone, None, local_alerts)
                             }
                         }
                     }
+                })
+                .collect();
+
+            // Execute all stats collection in parallel
+            let results = join_all(stats_futures).await;
+
+            // Process results
+            for (device, stats_opt, device_alerts) in results {
+                if let Some(stats) = &stats_opt {
+                    // Update stats in cache
+                    cache.update_device_stats(&device.ip_address, stats.clone());
+
+                    // Update previous hashrates for next iteration
+                    if args.watch && args.hashrate_alert.is_some() {
+                        previous_hashrates.insert(device.ip_address.clone(), stats.hashrate_mhs);
+                    }
                 } else {
-                    device_stats.push(None);
+                    // Mark device as offline in cache if failed
+                    cache.mark_device_probed(&device.ip_address, false);
                 }
+
+                device_stats.push(stats_opt);
+                alerts.extend(device_alerts);
             }
         }
 
@@ -419,7 +473,11 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
 
                 if args.no_stats {
                     // Basic table without stats
-                    let table_rows: Vec<BasicDeviceTableRow> = devices
+                    // Sort devices by hostname using natural/alphanumeric sorting
+                    let mut sorted_devices: Vec<_> = devices.iter().collect();
+                    sorted_devices.sort_by(|a, b| compare_str(&a.name, &b.name));
+
+                    let table_rows: Vec<BasicDeviceTableRow> = sorted_devices
                         .iter()
                         .map(|device| BasicDeviceTableRow {
                             name: device.name.clone(),
@@ -448,9 +506,13 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
                     }
                 } else {
                     // Full table with stats
-                    let table_rows: Vec<DeviceTableRow> = devices
+                    // Sort devices and stats together by hostname using natural/alphanumeric sorting
+                    let mut device_stats_pairs: Vec<_> =
+                        devices.iter().zip(device_stats.iter()).collect();
+                    device_stats_pairs.sort_by(|(a, _), (b, _)| compare_str(&a.name, &b.name));
+
+                    let table_rows: Vec<DeviceTableRow> = device_stats_pairs
                         .iter()
-                        .zip(device_stats.iter())
                         .map(|(device, stats)| {
                             if let Some(stats) = stats {
                                 DeviceTableRow {
@@ -698,7 +760,8 @@ pub async fn list(args: ListArgs<'_>) -> Result<()> {
 }
 
 async fn collect_device_stats(device: &crate::api::DeviceInfo) -> Result<crate::api::DeviceStats> {
-    let client = crate::api::AxeOsClient::with_timeout(&device.ip_address, Duration::from_secs(5))?;
+    let client =
+        crate::api::AxeOsClient::with_timeout(&device.ip_address, Duration::from_secs(60))?;
 
     let (info, stats) = client.get_complete_info().await?;
 

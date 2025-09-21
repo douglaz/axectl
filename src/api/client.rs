@@ -14,7 +14,7 @@ pub struct AxeOsClient {
 
 impl AxeOsClient {
     pub fn new(ip_address: &str) -> Result<Self> {
-        Self::with_timeout(ip_address, Duration::from_secs(10))
+        Self::with_timeout(ip_address, Duration::from_secs(60))
     }
 
     pub fn with_timeout(ip_address: &str, timeout: Duration) -> Result<Self> {
