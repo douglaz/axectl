@@ -42,11 +42,11 @@ tracing = "0.1"
 tracing-subscriber = "0.3.20"
 
 # MCP Server
-rmcp = { version = "0.6.3", features = ["server", "transport-io"], optional = true }
+rmcp = { version = "0.7.0", features = ["server", "transport-io"], optional = true }
 schemars = { version = "1.0", optional = true }
 
 [dev-dependencies]
-rmcp = { version = "0.6.3", features = ["server", "client", "transport-child-process"] }
+rmcp = { version = "0.7.0", features = ["server", "client", "transport-child-process"] }
 tempfile = "3"
 mockito = "1.4"
 proptest = "1.4"
