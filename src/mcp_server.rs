@@ -725,6 +725,8 @@ fn create_tool(name: &'static str, description: &'static str, schema: serde_json
         input_schema: Arc::new(schema.as_object().unwrap().clone()),
         output_schema: None,
         annotations: None,
+        title: None,
+        icons: None,
     }
 }
 
