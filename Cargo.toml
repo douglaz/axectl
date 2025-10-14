@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 description = "CLI tool for managing Bitaxe and NerdQAxe miners"
 license = "MIT"
-repository = "https://github.com/master/axectl"
+repository = "https://github.com/douglaz/axectl"
 
 [dependencies]
 # Core
