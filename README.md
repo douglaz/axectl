@@ -23,12 +23,12 @@ axectl monitor --temp-alert 75 --hashrate-alert 10
 ## 📦 Installation
 
 ### Static Binary Downloads (Recommended)
-Download pre-built static binaries from the [releases page](https://github.com/master/axectl/releases).
+Download pre-built static binaries from the [releases page](https://github.com/douglaz/axectl/releases).
 
 **Linux users**: Download the musl static binary - it works on any Linux distribution without dependencies:
 ```bash
 # Download latest release (replace VERSION with actual version)
-curl -L -o axectl https://github.com/master/axectl/releases/download/vVERSION/axectl-x86_64-linux-musl.tar.gz
+curl -L -o axectl https://github.com/douglaz/axectl/releases/download/vVERSION/axectl-x86_64-linux-musl.tar.gz
 tar -xzf axectl-x86_64-linux-musl.tar.gz
 chmod +x axectl
 ./axectl --help
@@ -44,7 +44,7 @@ chmod +x axectl
 
 #### Quick Build (Static Binary)
 ```bash
-git clone https://github.com/master/axectl.git
+git clone https://github.com/douglaz/axectl.git
 cd axectl
 cargo build --release
 # Automatically builds static musl binary: ./target/x86_64-unknown-linux-musl/release/axectl
@@ -53,10 +53,10 @@ cargo build --release
 #### Using Nix (Recommended)
 ```bash
 # Run directly from GitHub
-nix run 'git+https://github.com/master/axectl.git'
+nix run 'git+https://github.com/douglaz/axectl.git'
 
 # Or build locally with proper toolchain
-git clone https://github.com/master/axectl.git
+git clone https://github.com/douglaz/axectl.git
 cd axectl
 nix develop  # Enters environment with musl toolchain
 cargo build --release  # Builds static binary by default
@@ -363,7 +363,7 @@ axectl is built with modularity and performance in mind:
 
 ```bash
 # Clone repository
-git clone https://github.com/master/axectl.git
+git clone https://github.com/douglaz/axectl.git
 cd axectl
 
 # Build with Nix (recommended)
@@ -423,8 +423,8 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## 🆘 Support
 
-- **Issues**: [GitHub Issues](https://github.com/master/axectl/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/master/axectl/discussions)
+- **Issues**: [GitHub Issues](https://github.com/douglaz/axectl/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/douglaz/axectl/discussions)
 - **Discord**: Join the [Bitaxe Community](https://discord.gg/3E8ca2dkcC)
 
 ---
