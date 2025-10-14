@@ -68,10 +68,10 @@ jobs:
           
           ```bash
           # Using Nix
-          nix run 'git+https://github.com/master/axectl.git#${{ steps.get_tag.outputs.tag }}'
-          
+          nix run 'git+https://github.com/douglaz/axectl.git#${{ steps.get_tag.outputs.tag }}'
+
           # Using Cargo
-          cargo install --git https://github.com/master/axectl.git --tag ${{ steps.get_tag.outputs.tag }}
+          cargo install --git https://github.com/douglaz/axectl.git --tag ${{ steps.get_tag.outputs.tag }}
           ```
           
           ### Checksums
