@@ -937,7 +937,7 @@ mod tests {
 
     #[test]
     fn test_type_summary_calculation() {
-        let mut devices = vec![
+        let mut devices = [
             Device {
                 name: "bitaxe-1".to_string(),
                 ip_address: "192.168.1.100".to_string(),
