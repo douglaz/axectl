@@ -137,7 +137,7 @@ pub enum Commands {
     /// Monitor devices continuously
     Monitor {
         /// Update interval in seconds
-        #[arg(long, default_value = "30")]
+        #[arg(long, default_value = "1")]
         interval: u64,
 
         /// Alert on high temperature (celsius)

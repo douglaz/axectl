@@ -88,15 +88,14 @@ pub fn format_table<T: Tabled>(data: Vec<T>, _color: bool) -> String {
 
 // Helper functions for common formatting
 pub fn format_hashrate(hashrate_mhs: f64) -> String {
-    if hashrate_mhs >= 1_000_000.0 {
-        format!("{:.1} TH/s", hashrate_mhs / 1_000_000.0)
-    } else if hashrate_mhs >= 1_000.0 {
-        format!("{:.1} GH/s", hashrate_mhs / 1_000.0)
+    if hashrate_mhs >= 1_000.0 {
+        format!("{:.2} TH/s", hashrate_mhs / 1_000.0)
+    } else if hashrate_mhs >= 1.0 {
+        format!("{:.0} GH/s", hashrate_mhs / 1.0)
     } else {
-        format!("{:.1} MH/s", hashrate_mhs)
+        format!("{:.2} MH/s", hashrate_mhs)
     }
 }
-
 pub fn format_temperature(temp_celsius: f64, color: bool) -> String {
     let temp_str = format!("{:.1}°C", temp_celsius);
 
