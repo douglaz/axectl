@@ -59,7 +59,7 @@ jobs:
       run: cargo test --target x86_64-unknown-linux-musl --verbose
 
     - name: Upload static binary artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: axectl-x86_64-linux-musl
         path: target/x86_64-unknown-linux-musl/release/axectl

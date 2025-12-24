@@ -59,7 +59,7 @@ jobs:
         done
     
     - name: Upload artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: axectl-linux-binaries
         path: artifacts/*.tar.gz
@@ -118,7 +118,7 @@ jobs:
         done
     
     - name: Upload artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: axectl-macos-binaries
         path: artifacts/*.tar.gz
@@ -173,7 +173,7 @@ jobs:
         }
     
     - name: Upload artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: axectl-windows-binaries
         path: artifacts/*.zip
