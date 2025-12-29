@@ -727,6 +727,7 @@ fn create_tool(name: &'static str, description: &'static str, schema: serde_json
         annotations: None,
         title: None,
         icons: None,
+        meta: None,
     }
 }
 
@@ -960,6 +961,7 @@ impl ServerHandler for AxectlMcpServer {
         Ok(ListToolsResult {
             tools,
             next_cursor: None,
+            meta: None,
         })
     }
 
