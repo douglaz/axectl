@@ -43,7 +43,7 @@ tracing-subscriber = "0.3.22"
 
 # MCP Server
 rmcp = { version = "0.8.1", features = ["server", "transport-io"], optional = true }
-schemars = { version = "1.0", optional = true }
+schemars = { version = "1.2", optional = true }
 
 [dev-dependencies]
 rmcp = { version = "0.8.1", features = ["server", "client", "transport-child-process"] }
