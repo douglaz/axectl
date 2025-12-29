@@ -31,7 +31,7 @@ jobs:
         sudo apt-get install -y musl-tools pkg-config
 
     - name: Cache cargo dependencies
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: |
           ~/.cargo/registry
@@ -59,7 +59,7 @@ jobs:
       run: cargo test --target x86_64-unknown-linux-musl --verbose
 
     - name: Upload static binary artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: axectl-x86_64-linux-musl
         path: target/x86_64-unknown-linux-musl/release/axectl
@@ -80,7 +80,7 @@ jobs:
           experimental-features = nix-command flakes
 
     - name: Cache Nix store
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: /nix/store
         key: nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}
@@ -114,7 +114,7 @@ jobs:
       uses: dtolnay/rust-toolchain@stable
 
     - name: Cache cargo dependencies
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: |
           ~/.cargo/registry
