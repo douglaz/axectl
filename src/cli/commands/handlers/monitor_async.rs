@@ -878,3 +878,31 @@ fn format_last_seen(last_seen: DateTime<Utc>) -> String {
         format!("{days}d ago", days = duration.num_days())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn interval_first_tick_completes_without_waiting_for_the_period() {
+        let mut timer = interval(Duration::from_secs(60));
+
+        assert!(
+            timeout(Duration::from_millis(100), timer.tick())
+                .await
+                .is_ok()
+        );
+    }
+
+    #[tokio::test]
+    async fn interval_second_tick_waits_for_the_period() {
+        let mut timer = interval(Duration::from_secs(1));
+
+        timer.tick().await;
+        assert!(
+            timeout(Duration::from_millis(100), timer.tick())
+                .await
+                .is_err()
+        );
+    }
+}
