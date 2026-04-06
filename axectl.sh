@@ -4,13 +4,17 @@ set -euo pipefail
 # Configuration
 REPO="douglaz/axectl"
 BINARY_NAME="axectl"
-INSTALL_DIR="${HOME}/.local/bin"
+DEFAULT_INSTALL_DIR="${XDG_DATA_HOME:-${HOME}/.local/share}/${BINARY_NAME}/bin"
+INSTALL_DIR="${AXECTL_INSTALL_DIR:-${DEFAULT_INSTALL_DIR}}"
 INSTALLED_VERSION_FILE="${INSTALL_DIR}/.${BINARY_NAME}.version"
+LAST_CHECK_FILE="${INSTALL_DIR}/.${BINARY_NAME}.last_check"
 # Determine script directory (only available when run as a file, not via stdin)
 if [[ -n "${BASH_SOURCE[0]:-}" ]]; then
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    SCRIPT_PATH="${SCRIPT_DIR}/$(basename "${BASH_SOURCE[0]}")"
 else
     SCRIPT_DIR=""
+    SCRIPT_PATH=""
 fi
 
 # Platform detection
@@ -82,6 +86,16 @@ get_installed_version() {
     fi
 }
 
+would_overwrite_wrapper() {
+    local target_path="$1"
+
+    if [[ -z "$SCRIPT_PATH" || ! -e "$SCRIPT_PATH" || ! -e "$target_path" ]]; then
+        return 1
+    fi
+
+    [[ "$target_path" -ef "$SCRIPT_PATH" ]]
+}
+
 # Download and install binary
 install_binary() {
     local version="$1"
@@ -130,10 +144,18 @@ install_binary() {
         rm -rf "$temp_dir"
         exit 1
     fi
+
+    local target_path="${INSTALL_DIR}/${BINARY_NAME}"
+    if would_overwrite_wrapper "$target_path"; then
+        echo "Error: Refusing to install ${BINARY_NAME} over the wrapper script." >&2
+        echo "Set AXECTL_INSTALL_DIR to a different directory." >&2
+        rm -rf "$temp_dir"
+        exit 1
+    fi
     
     # Make executable and move to install directory
     chmod +x "$binary_path"
-    mv "$binary_path" "${INSTALL_DIR}/${BINARY_NAME}"
+    mv "$binary_path" "$target_path"
     rm -rf "$temp_dir"
     
     # Record installed version
@@ -144,16 +166,14 @@ install_binary() {
 
 # Check for updates periodically (once per day)
 should_check_update() {
-    local check_file="${INSTALL_DIR}/.${BINARY_NAME}.last_check"
-    
     # Always check if binary doesn't exist
     if [[ ! -f "${INSTALL_DIR}/${BINARY_NAME}" ]]; then
         return 0
     fi
     
     # Check if we've checked recently
-    if [[ -f "$check_file" ]]; then
-        local last_check=$(stat -c %Y "$check_file" 2>/dev/null || stat -f %m "$check_file" 2>/dev/null || echo 0)
+    if [[ -f "$LAST_CHECK_FILE" ]]; then
+        local last_check=$(stat -c %Y "$LAST_CHECK_FILE" 2>/dev/null || stat -f %m "$LAST_CHECK_FILE" 2>/dev/null || echo 0)
         local current_time=$(date +%s)
         local day_in_seconds=86400
         
@@ -163,7 +183,7 @@ should_check_update() {
     fi
     
     # Mark that we're checking now
-    touch "$check_file"
+    touch "$LAST_CHECK_FILE"
     return 0
 }
 
