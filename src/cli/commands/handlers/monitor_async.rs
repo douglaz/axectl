@@ -321,6 +321,10 @@ async fn monitor_async_impl(
     // Main monitoring loop
     let mut monitor_timer = interval(Duration::from_secs(config.interval));
 
+    // Run an immediate update before waiting for the first interval tick.
+    // Tokio's interval timer does not tick immediately on first await.
+    update_and_display(&state, &cache, cache_path, &config, &tx).await?;
+
     loop {
         tokio::select! {
             // Check for shutdown signal with high priority
