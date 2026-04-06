@@ -239,7 +239,6 @@ async fn monitor_async_impl(
 
         Some(tokio::spawn(async move {
             let mut discovery_timer = interval(Duration::from_secs(discover_interval));
-            discovery_timer.tick().await; // Skip the first immediate tick
 
             loop {
                 // Check for shutdown signal
@@ -247,6 +246,8 @@ async fn monitor_async_impl(
                     break;
                 }
 
+                // Tokio intervals tick immediately on the first await, so the
+                // initial discovery starts without waiting discover_interval.
                 discovery_timer.tick().await;
 
                 // Mark discovery as active
@@ -321,10 +322,6 @@ async fn monitor_async_impl(
     // Main monitoring loop
     let mut monitor_timer = interval(Duration::from_secs(config.interval));
 
-    // Run an immediate update before waiting for the first interval tick.
-    // Tokio's interval timer does not tick immediately on first await.
-    update_and_display(&state, &cache, cache_path, &config, &tx).await?;
-
     loop {
         tokio::select! {
             // Check for shutdown signal with high priority
@@ -358,17 +355,21 @@ async fn monitor_async_impl(
                 // Handle messages from background tasks
                 match msg {
                     MonitorMessage::NewDevices(devices) => {
-                        let mut state_guard = state.write().await;
-                        for device in devices {
-                            if matches!(config.format, OutputFormat::Text) {
-                                print_success(
-                                    &format!("🆕 New device discovered: {name} ({ip})",
-                                        name = device.name, ip = device.ip_address),
-                                    config.color
-                                );
+                        {
+                            let mut state_guard = state.write().await;
+                            for device in devices {
+                                if matches!(config.format, OutputFormat::Text) {
+                                    print_success(
+                                        &format!("🆕 New device discovered: {name} ({ip})",
+                                            name = device.name, ip = device.ip_address),
+                                        config.color
+                                    );
+                                }
+                                state_guard.devices.insert(device.ip_address.clone(), device);
                             }
-                            state_guard.devices.insert(device.ip_address.clone(), device);
                         }
+
+                        update_and_display(&state, &cache, cache_path, &config, &tx).await?;
                     }
                     MonitorMessage::DiscoveryComplete(count) => {
                         if matches!(config.format, OutputFormat::Text) {
