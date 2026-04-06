@@ -249,7 +249,7 @@ jobs:
         The bootstrap script will:
         - Automatically detect your platform
         - Download the appropriate binary
-        - Extract and install to \`~/.local/bin\`
+        - Extract and install to \`~/.local/share/axectl/bin\`
         - Check for updates periodically
         - Use local builds when available (for development)
         
