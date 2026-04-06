@@ -86,6 +86,16 @@ get_installed_version() {
     fi
 }
 
+would_overwrite_wrapper() {
+    local target_path="$1"
+
+    if [[ -z "$SCRIPT_PATH" || ! -e "$SCRIPT_PATH" || ! -e "$target_path" ]]; then
+        return 1
+    fi
+
+    [[ "$target_path" -ef "$SCRIPT_PATH" ]]
+}
+
 # Download and install binary
 install_binary() {
     local version="$1"
@@ -136,7 +146,7 @@ install_binary() {
     fi
 
     local target_path="${INSTALL_DIR}/${BINARY_NAME}"
-    if [[ "$target_path" == "$SCRIPT_PATH" ]]; then
+    if would_overwrite_wrapper "$target_path"; then
         echo "Error: Refusing to install ${BINARY_NAME} over the wrapper script." >&2
         echo "Set AXECTL_INSTALL_DIR to a different directory." >&2
         rm -rf "$temp_dir"
