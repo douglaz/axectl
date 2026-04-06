@@ -16,8 +16,9 @@ use crossterm::{
 };
 use futures::future::join_all;
 use std::collections::HashMap;
+use std::future::Future;
 use std::io::{Write as IoWrite, stdout};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -66,6 +67,18 @@ pub struct AsyncMonitorConfig<'a> {
 enum MonitorMessage {
     NewDevices(Vec<Device>),
     DiscoveryComplete(usize),
+}
+
+struct DiscoveryLoopContext {
+    discover_interval: u64,
+    shutdown: Arc<AtomicBool>,
+    state: Arc<RwLock<MonitorState>>,
+    cache: Arc<RwLock<DeviceCache>>,
+    tx_discovery: mpsc::Sender<MonitorMessage>,
+    network: Option<String>,
+    no_mdns: bool,
+    color: bool,
+    cache_path_buf: PathBuf,
 }
 
 /// Table row for full stats display
@@ -227,94 +240,23 @@ async fn monitor_async_impl(
 
     // Spawn background discovery task if enabled
     let _discovery_handle = if config.discover {
-        let tx_discovery = tx.clone();
-        let cache_clone = cache.clone();
-        let state_clone = state.clone();
-        let network = config.network.clone();
-        let no_mdns = config.no_mdns;
-        let discover_interval = config.discover_interval;
-        let color = config.color;
-        let cache_path_buf = cache_path.to_path_buf();
-        let shutdown_clone = shutdown.clone();
-
-        Some(tokio::spawn(async move {
-            let mut discovery_timer = interval(Duration::from_secs(discover_interval));
-
-            loop {
-                // Check for shutdown signal
-                if shutdown_clone.load(Ordering::SeqCst) {
-                    break;
-                }
-
-                // Tokio intervals tick immediately on the first await, so the
-                // initial discovery starts without waiting discover_interval.
-                discovery_timer.tick().await;
-
-                // Mark discovery as active
-                {
-                    let mut state_guard = state_clone.write().await;
-                    state_guard.discovery_active = true;
-                }
-
-                // Perform discovery
-                match perform_discovery(
-                    network.clone(),
-                    30, // 30 second timeout for discovery
-                    !no_mdns,
-                    Some(&cache_path_buf),
-                    color,
-                )
-                .await
-                {
-                    Ok(discovered) => {
-                        let count = discovered.len();
-
-                        // Update cache and find new devices
-                        let mut new_devices = Vec::new();
-                        {
-                            let mut cache_guard = cache_clone.write().await;
-                            let state_guard = state_clone.read().await;
-
-                            for device in discovered {
-                                if !state_guard.devices.contains_key(&device.ip_address) {
-                                    new_devices.push(device.clone());
-                                }
-                                cache_guard.update_device(device);
-                            }
-
-                            // Save cache
-                            if let Err(e) = cache_guard.save(&cache_path_buf) {
-                                tracing::warn!("Failed to save cache after discovery: {e}");
-                            }
-                        }
-
-                        // Send new devices through channel
-                        if !new_devices.is_empty() {
-                            let _ = tx_discovery
-                                .send(MonitorMessage::NewDevices(new_devices))
-                                .await;
-                        }
-
-                        // Send discovery complete message
-                        let _ = tx_discovery
-                            .send(MonitorMessage::DiscoveryComplete(count))
-                            .await;
-
-                        // Mark discovery as inactive
-                        {
-                            let mut state_guard = state_clone.write().await;
-                            state_guard.discovery_active = false;
-                            state_guard.last_discovery = Some(Utc::now());
-                        }
-                    }
-                    Err(e) => {
-                        tracing::warn!("Background discovery failed: {e}");
-                        let mut state_guard = state_clone.write().await;
-                        state_guard.discovery_active = false;
-                    }
-                }
-            }
-        }))
+        Some(tokio::spawn(run_discovery_loop(
+            DiscoveryLoopContext {
+                discover_interval: config.discover_interval,
+                shutdown: shutdown.clone(),
+                state: state.clone(),
+                cache: cache.clone(),
+                tx_discovery: tx.clone(),
+                network: config.network.clone(),
+                no_mdns: config.no_mdns,
+                color: config.color,
+                cache_path_buf: cache_path.to_path_buf(),
+            },
+            |network, no_mdns, cache_path_buf, color| async move {
+                perform_discovery(network, 30, !no_mdns, Some(cache_path_buf.as_path()), color)
+                    .await
+            },
+        )))
     } else {
         None
     };
@@ -352,39 +294,125 @@ async fn monitor_async_impl(
             }
 
             Some(msg) = rx.recv() => {
-                // Handle messages from background tasks
-                match msg {
-                    MonitorMessage::NewDevices(devices) => {
-                        {
-                            let mut state_guard = state.write().await;
-                            for device in devices {
-                                if matches!(config.format, OutputFormat::Text) {
-                                    print_success(
-                                        &format!("🆕 New device discovered: {name} ({ip})",
-                                            name = device.name, ip = device.ip_address),
-                                        config.color
-                                    );
-                                }
-                                state_guard.devices.insert(device.ip_address.clone(), device);
-                            }
-                        }
-
-                        update_and_display(&state, &cache, cache_path, &config, &tx).await?;
-                    }
-                    MonitorMessage::DiscoveryComplete(count) => {
-                        if matches!(config.format, OutputFormat::Text) {
-                            print_info(
-                                &format!("✓ Background discovery complete, {count} total devices found"),
-                                config.color
-                            );
-                        }
-                    }
+                if handle_monitor_message(&state, &config, msg).await {
+                    update_and_display(&state, &cache, cache_path, &config, &tx).await?;
                 }
             }
         }
     }
 
     Ok(())
+}
+
+async fn run_discovery_loop<F, Fut>(ctx: DiscoveryLoopContext, perform_discovery_fn: F)
+where
+    F: Fn(Option<String>, bool, PathBuf, bool) -> Fut + Send + Sync + 'static,
+    Fut: Future<Output = Result<Vec<Device>>> + Send + 'static,
+{
+    let mut discovery_timer = interval(Duration::from_secs(ctx.discover_interval));
+
+    loop {
+        if ctx.shutdown.load(Ordering::SeqCst) {
+            break;
+        }
+
+        discovery_timer.tick().await;
+
+        {
+            let mut state_guard = ctx.state.write().await;
+            state_guard.discovery_active = true;
+        }
+
+        match perform_discovery_fn(
+            ctx.network.clone(),
+            ctx.no_mdns,
+            ctx.cache_path_buf.clone(),
+            ctx.color,
+        )
+        .await
+        {
+            Ok(discovered) => {
+                let count = discovered.len();
+                let mut new_devices = Vec::new();
+
+                {
+                    let mut cache_guard = ctx.cache.write().await;
+                    let state_guard = ctx.state.read().await;
+
+                    for device in discovered {
+                        if !state_guard.devices.contains_key(&device.ip_address) {
+                            new_devices.push(device.clone());
+                        }
+                        cache_guard.update_device(device);
+                    }
+
+                    if let Err(e) = cache_guard.save(&ctx.cache_path_buf) {
+                        tracing::warn!("Failed to save cache after discovery: {e}");
+                    }
+                }
+
+                if !new_devices.is_empty() {
+                    let _ = ctx
+                        .tx_discovery
+                        .send(MonitorMessage::NewDevices(new_devices))
+                        .await;
+                }
+
+                let _ = ctx
+                    .tx_discovery
+                    .send(MonitorMessage::DiscoveryComplete(count))
+                    .await;
+
+                {
+                    let mut state_guard = ctx.state.write().await;
+                    state_guard.discovery_active = false;
+                    state_guard.last_discovery = Some(Utc::now());
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Background discovery failed: {e}");
+                let mut state_guard = ctx.state.write().await;
+                state_guard.discovery_active = false;
+            }
+        }
+    }
+}
+
+async fn handle_monitor_message(
+    state: &Arc<RwLock<MonitorState>>,
+    config: &AsyncMonitorConfig<'_>,
+    msg: MonitorMessage,
+) -> bool {
+    match msg {
+        MonitorMessage::NewDevices(devices) => {
+            let mut state_guard = state.write().await;
+            for device in devices {
+                if matches!(config.format, OutputFormat::Text) {
+                    print_success(
+                        &format!(
+                            "🆕 New device discovered: {name} ({ip})",
+                            name = device.name,
+                            ip = device.ip_address
+                        ),
+                        config.color,
+                    );
+                }
+                state_guard
+                    .devices
+                    .insert(device.ip_address.clone(), device);
+            }
+            true
+        }
+        MonitorMessage::DiscoveryComplete(count) => {
+            if matches!(config.format, OutputFormat::Text) {
+                print_info(
+                    &format!("✓ Background discovery complete, {count} total devices found"),
+                    config.color,
+                );
+            }
+            false
+        }
+    }
 }
 
 async fn update_and_display(
@@ -882,27 +910,117 @@ fn format_last_seen(last_seen: DateTime<Utc>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::api::DeviceType;
+    use tempfile::tempdir;
 
-    #[tokio::test]
-    async fn interval_first_tick_completes_without_waiting_for_the_period() {
-        let mut timer = interval(Duration::from_secs(60));
+    fn test_device(ip_address: &str) -> Device {
+        Device {
+            name: "test-device".to_string(),
+            ip_address: ip_address.to_string(),
+            device_type: DeviceType::BitaxeUltra,
+            serial_number: None,
+            status: DeviceStatus::Online,
+            discovered_at: Utc::now(),
+            last_seen: Utc::now(),
+            stats: None,
+        }
+    }
 
-        assert!(
-            timeout(Duration::from_millis(100), timer.tick())
-                .await
-                .is_ok()
-        );
+    fn test_state() -> Arc<RwLock<MonitorState>> {
+        Arc::new(RwLock::new(MonitorState {
+            devices: HashMap::new(),
+            alerts: Vec::new(),
+            discovery_active: false,
+            last_discovery: None,
+            alert_count: 0,
+            previous_hashrates: HashMap::new(),
+        }))
     }
 
     #[tokio::test]
-    async fn interval_second_tick_waits_for_the_period() {
-        let mut timer = interval(Duration::from_secs(1));
+    async fn discovery_loop_starts_without_waiting_for_discover_interval() {
+        let tempdir = tempdir().expect("tempdir");
+        let state = test_state();
+        let cache = Arc::new(RwLock::new(DeviceCache::new()));
+        let (tx, mut rx) = mpsc::channel(10);
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let device = test_device("192.168.1.10");
 
-        timer.tick().await;
-        assert!(
-            timeout(Duration::from_millis(100), timer.tick())
-                .await
-                .is_err()
-        );
+        let handle = tokio::spawn(run_discovery_loop(
+            DiscoveryLoopContext {
+                discover_interval: 60,
+                shutdown: shutdown.clone(),
+                state,
+                cache,
+                tx_discovery: tx,
+                network: None,
+                no_mdns: false,
+                color: false,
+                cache_path_buf: tempdir.path().to_path_buf(),
+            },
+            {
+                let calls = calls.clone();
+                let device = device.clone();
+                move |_network, _no_mdns, _cache_path, _color| {
+                    let calls = calls.clone();
+                    let device = device.clone();
+                    async move {
+                        calls.fetch_add(1, Ordering::SeqCst);
+                        Ok(vec![device])
+                    }
+                }
+            },
+        ));
+
+        let msg = timeout(Duration::from_millis(200), rx.recv())
+            .await
+            .expect("discovery loop should emit promptly")
+            .expect("channel should stay open");
+
+        match msg {
+            MonitorMessage::NewDevices(devices) => {
+                assert_eq!(devices.len(), 1);
+                assert_eq!(devices[0].ip_address, "192.168.1.10");
+            }
+            MonitorMessage::DiscoveryComplete(_) => {
+                panic!("expected new devices before discovery completion")
+            }
+        }
+
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+
+        shutdown.store(true, Ordering::SeqCst);
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn new_devices_message_requests_immediate_refresh() {
+        let tempdir = tempdir().expect("tempdir");
+        let state = test_state();
+        let device = test_device("192.168.1.11");
+        let config = AsyncMonitorConfig {
+            interval: 1,
+            temp_alert: None,
+            hashrate_alert: None,
+            type_filter: None,
+            type_summary: false,
+            format: OutputFormat::Json,
+            color: false,
+            cache_dir: Some(tempdir.path()),
+            all: false,
+            no_stats: true,
+            discover: false,
+            discover_interval: 60,
+            network: None,
+            no_mdns: false,
+        };
+
+        let refresh_requested =
+            handle_monitor_message(&state, &config, MonitorMessage::NewDevices(vec![device])).await;
+
+        assert!(refresh_requested);
+        let state_guard = state.read().await;
+        assert!(state_guard.devices.contains_key("192.168.1.11"));
     }
 }
