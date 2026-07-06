@@ -13,9 +13,9 @@ dependencies = [
 
 [[package]]
 name = "alphanumeric-sort"
-version = "1.5.6"
+version = "1.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7789d0c06f5a946e0d860f8a3cd055dd714d44657c16116cac8ee47da03f280"
+checksum = "a97de3ad85c4425a2c267a5e91adbe49f9f14e650bd9c78e96b6bc00e5f6673a"
 
 [[package]]
 name = "android_system_properties"
